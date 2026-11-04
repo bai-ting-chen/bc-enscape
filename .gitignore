@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+# never: project data or renders
+*.3dm
+*.png
+*.psd
