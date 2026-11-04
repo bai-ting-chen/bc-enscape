@@ -1,5 +1,7 @@
 __pycache__/
 *.pyc
+# Codex run folders (briefs, reports)
+_wip/
 # never: project data or renders
 *.3dm
 *.png
