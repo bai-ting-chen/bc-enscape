@@ -19,7 +19,7 @@ hidden, not headless. The hooks are private Enscape plug-in internals, not the C
 Enscape 4.5.0.485: recheck them after an Enscape upgrade.
 
 ## Workflow
-Lock and bind (Rook) → view and preset (Rhino) → find the renderer host (PowerShell) → start
+Lock and bind (Rook) → view and preset (Rook) → find the renderer host (PowerShell) → start
 (Rook) → sun and capture (Rook) → check and clean up → optional overlay (host Python).
 
 Machine lock: if the ai-work-modes skill is installed, take its lock before step 1 and release it
@@ -31,9 +31,12 @@ or a loop. Limits and failures are in [Troubleshooting](#troubleshooting).
 
 1. **Bind.** Ping Rook and list sessions. With several Rhino windows, bind the intended one with
    `rhino_set_active_instance`. Record its camera and sun. Never save the model unless asked.
-2. **View and preset.** Restore the requested named view in the main viewport, not a floating
-   one. Pick the Enscape preset in Enscape itself; the script does not set presets. For overlays:
-   orthographic projection matching Rhino, white mode, transparent background, final resolution.
+2. **View and preset.** Restore the requested orthographic named view in the main viewport, not
+   a floating one. Import the helper as shown below. For overlays, call
+   `enscape.configure_lighting(3000, 3000)` before starting.
+   This temporarily selects white mode, transparency and the requested pixel dimensions through
+   Enscape's embedded preset API. Existing presets are backed up in memory. No UI is needed.
+   For ordinary material renders, keep the existing preset and skip this call.
 3. **Renderer host.** Find `Enscape.RendererHost` with `Get-CimInstance Win32_Process` and take
    the one whose `ParentProcessId` is the bound Rhino PID. Look it up each job; never reuse a PID.
 4. **Start** through `rhino_execute`:
@@ -48,11 +51,15 @@ or a loop. Limits and failures are in [Troubleshooting](#troubleshooting).
    Check: `enscape.status()` shows `start_task` `RanToCompletion` and `running` true.
 5. **Sun and capture.** Set the sun, for example azimuth 250°, altitude 30°:
    `sc.doc.Lights.Sun.SetPosition(250, 30)` after `import scriptcontext as sc`; turn on the sun or
-   manual control if needed. Let Enscape update, then call
+   manual control if needed. Call `enscape.prepare_capture(named_view_name)` and poll
+   `enscape.preparation_status()` until `preparation` is `RanToCompletion`. This sends the exact
+   named camera, Rhino sun and view reference; a missing view reference causes an internal export
+   error. The helper supports unclipped views. Let Enscape update, then call
    `enscape.request_capture(absolute_new_png_path)`.
    Check: `enscape.collect_capture()` returns the moved PNG and its pixel size.
 6. **Check and clean up.** Open the image. Restore camera and sun. If this job started the
-   renderer, close only that renderer's window, then call `enscape.stop_monitor()`. Outputs stay
+   renderer, close only that renderer's window, then call `enscape.stop_monitor()`. If a temporary
+   preset was used, call `enscape.restore_preset()` and verify its readback. Outputs stay
    in the project, never in this skill.
 
 ## Sunlight overlay (optional)
