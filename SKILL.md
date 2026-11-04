@@ -65,7 +65,8 @@ or a loop. Limits and failures are in [Troubleshooting](#troubleshooting).
 ## Sunlight overlay (optional)
 In a new project output folder, prepare three images of matching size and projection:
 - `rhino-base.png`: the original Rhino screenshot;
-- `rhino-mask.png`: RGBA, geometry only, annotations hidden (show them again afterwards);
+- `rhino-mask.png`: RGBA, geometry only, annotations hidden (switch away from an annotation
+  layer if it is current, since Rhino keeps the current layer visible; restore afterwards);
 - `enscape-orthographic.png`: the transparent white-mode render from step 5.
 
 Run with a host Python that has `numpy`, `opencv-python`, `Pillow` and `psd-tools`:
@@ -76,8 +77,9 @@ py -3.14 "$HOME\.claude\skills\bc-enscape\scripts\lighting_composite.py" "<proje
 
 It writes an overlay PNG, a composite PNG, a two-layer PSD, a comparison PNG and a validation JSON,
 and refuses to overwrite existing outputs. Alignment allows only uniform scale and translation and
-needs at least 99% silhouette overlap; if it fails, fix the camera. Look at the composite before
-reporting.
+needs at least 99% outer silhouette overlap; enclosed glass openings are excluded from that
+camera check, while their transparency is retained in the overlay. If it fails, fix the camera.
+Look at the composite before reporting.
 
 The overlay is a grayscale Multiply layer taken from white-mode shading: it only darkens the base
 and is not a true light or shadow pass. Photoshop is not needed.

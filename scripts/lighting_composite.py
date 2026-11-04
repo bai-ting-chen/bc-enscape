@@ -11,6 +11,15 @@ from psd_tools.api.layers import PixelLayer
 from psd_tools.constants import BlendMode
 
 
+def outer_silhouette(mask):
+    """Ignore enclosed transparent glass/rattan holes when checking the camera."""
+    contours, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL,
+                                   cv2.CHAIN_APPROX_SIMPLE)
+    filled = np.zeros(mask.shape, dtype=np.uint8)
+    cv2.drawContours(filled, contours, -1, 1, cv2.FILLED)
+    return filled.astype(bool)
+
+
 def align_lighting(render, rhino_alpha):
     """Match orthographic framing using uniform scale and translation only."""
     source = np.asarray(render, dtype=np.float32)
@@ -32,7 +41,8 @@ def align_lighting(render, rhino_alpha):
     rgb = cv2.warpAffine(premultiplied, matrix, size)
     rgb = np.divide(rgb, alpha[:, :, None], out=np.full_like(rgb, 255),
                     where=alpha[:, :, None] > 1e-6)
-    source_mask, target_mask = alpha > 0.5, target_alpha > 0.5
+    source_mask = outer_silhouette(alpha > 0.5)
+    target_mask = outer_silhouette(target_alpha > 0.5)
     overlap = float(np.sum(source_mask & target_mask) /
                     np.sum(source_mask | target_mask))
     if overlap < 0.99:
@@ -41,6 +51,7 @@ def align_lighting(render, rhino_alpha):
         "uniform_scale": scale,
         "source_to_base_matrix": matrix.tolist(),
         "silhouette_intersection_over_union": overlap,
+        "alignment_mask": "Filled external silhouettes; original render alpha retained",
     }
 
 
