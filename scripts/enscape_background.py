@@ -40,7 +40,8 @@ def check_version():
         matches = re.findall(r"^Tested with Enscape (\d+(?:\.\d+){1,3})\.\s*$", stream.read(), re.MULTILINE)
     tested = matches[0] if len(matches) == 1 else None
     installed = _installed_version()
-    return {"installed": installed, "tested": tested, "match": installed == tested}
+    return {"installed": installed, "tested": tested, "match": installed == tested,
+            "pending_profile_restore": os.path.exists(_profile_backup_path())}
 
 
 def _read_defaults():
@@ -91,7 +92,7 @@ def apply_defaults(overrides):
     """Apply the user's sheet plus explicit request values, retaining backups."""
     if not isinstance(overrides, dict):
         raise ValueError("Overrides must be a dict")
-    if PRESET_KEY in sc.sticky or GENERAL_KEY in sc.sticky:
+    if PRESET_KEY in sc.sticky or GENERAL_KEY in sc.sticky or os.path.exists(_profile_backup_path()):
         raise ValueError("Restore existing temporary settings before applying defaults")
     values = _read_defaults()
     values.update(overrides)
@@ -122,7 +123,7 @@ def restore_settings():
     result = {}
     if PRESET_KEY in sc.sticky:
         result["preset"] = restore_preset()
-    if GENERAL_KEY in sc.sticky:
+    if GENERAL_KEY in sc.sticky or os.path.exists(_profile_backup_path()):
         result["general"] = restore_general()
     return result
 
@@ -410,6 +411,41 @@ def profile_bytes():
         return stream.read()
 
 
+def _profile_backup_path():
+    return os.path.join(os.environ["LOCALAPPDATA"], "bc-enscape", "profile-backup.json")
+
+
+def _read_profile_backup():
+    with open(_profile_backup_path(), "rb") as stream:
+        data = json.loads(stream.read().decode("utf-8"))
+    if os.path.normcase(os.path.abspath(data["profile_path"])) != os.path.normcase(os.path.abspath(profile_path())):
+        raise ValueError("Profile backup belongs to a different profile path; backup retained")
+    return {key: base64.b64decode(data[key], validate=True) if data[key] is not None else None
+            for key in ("before", "after")}
+
+
+def _write_profile_backup(before, after):
+    """Persist exact recovery bytes before any profile replacement; never overwrite."""
+    path = _profile_backup_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    data = {key: base64.b64encode(value).decode("ascii") if value is not None else None
+            for key, value in (("before", before), ("after", after))}
+    data["profile_path"] = os.path.abspath(profile_path())
+    created = False
+    try:
+        with open(path, "xb") as stream:
+            created = True
+            stream.write(json.dumps(data).encode("utf-8"))
+            stream.flush()
+            os.fsync(stream.fileno())
+        if _read_profile_backup() != {"before": before, "after": after}:
+            raise ValueError("Profile backup failed byte readback")
+    except Exception:
+        if created:
+            os.remove(path)
+        raise
+
+
 def write_profile(data):
     """Replace the profile only after the complete new contents reach disk."""
     path = profile_path()
@@ -638,7 +674,7 @@ def configure_general(settings):
     Enscape loads these values at host initialization. This edits the profile,
     not live hosts; restarting another document's host is never implicit.
     """
-    if GENERAL_KEY in sc.sticky:
+    if GENERAL_KEY in sc.sticky or os.path.exists(_profile_backup_path()):
         raise ValueError("Temporary general settings already exist; restore them first")
     if PRESET_KEY in sc.sticky:
         raise ValueError("Restore the temporary visual preset before editing the profile")
@@ -648,6 +684,7 @@ def configure_general(settings):
     for key, value in changes.items():
         profile["Settings"][key] = {"Value": value}
     after = json.dumps(profile, indent=2).encode("utf-8")
+    _write_profile_backup(before, after)
     sc.sticky[GENERAL_KEY] = {"before": before, "after": after}
     try:
         write_profile(after)
@@ -661,7 +698,10 @@ def configure_general(settings):
 
 
 def restore_general():
-    state = sc.sticky[GENERAL_KEY]
+    backup = _profile_backup_path()
+    state = _read_profile_backup() if os.path.exists(backup) else sc.sticky[GENERAL_KEY]
+    if GENERAL_KEY in sc.sticky and sc.sticky[GENERAL_KEY] != state:
+        raise ValueError("Profile backups disagree; backups retained")
     current = profile_bytes()
     if current not in (state["before"], state["after"]):
         raise ValueError("Profile changed externally; backup retained, refusing to replace it")
@@ -672,7 +712,9 @@ def restore_general():
         write_profile(state["before"])
     if profile_bytes() != state["before"]:
         raise ValueError("General restoration failed byte readback")
-    del sc.sticky[GENERAL_KEY]
+    if os.path.exists(backup):
+        os.remove(backup)
+    sc.sticky.pop(GENERAL_KEY, None)
     return {"general_restored": True}
 
 

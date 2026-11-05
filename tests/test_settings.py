@@ -94,14 +94,14 @@ class Collection(unittest.TestCase):
 
 class GeneralPersistence(unittest.TestCase):
     def test_failed_write_keeps_original_bytes(self):
-        import builtins, os
+        import base64, builtins, os
         with tempfile.TemporaryDirectory(dir=ROOT,prefix="profile-test-") as folder:
             path=Path(folder)/"settings.json"
             before=b'{"Version":3,"Settings":{}}'
             path.write_bytes(before)
-            scope=functions("configure_general","restore_general","write_profile")
+            scope=functions("configure_general","restore_general","write_profile","_write_profile_backup","_read_profile_backup")
             sticky={}
-            scope.update(os=os,json=json,System=SimpleNamespace(Guid=SimpleNamespace(NewGuid=lambda:"test")),sc=SimpleNamespace(sticky=sticky),GENERAL_KEY="general",PRESET_KEY="preset",validate_settings=lambda x,**kwargs:x,profile_path=lambda:str(path),profile_bytes=lambda:path.read_bytes())
+            scope.update(os=os,json=json,base64=base64,_profile_backup_path=lambda:str(Path(folder)/"profile-backup.json"),System=SimpleNamespace(Guid=SimpleNamespace(NewGuid=lambda:"test")),sc=SimpleNamespace(sticky=sticky),GENERAL_KEY="general",PRESET_KEY="preset",validate_settings=lambda x,**kwargs:x,profile_path=lambda:str(path),profile_bytes=lambda:path.read_bytes())
             class BrokenStream:
                 def __init__(self,file):self.file=file
                 def __enter__(self):return self

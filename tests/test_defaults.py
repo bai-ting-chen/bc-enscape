@@ -10,11 +10,13 @@ class Version(unittest.TestCase):
     def test_mismatch_returns_values_without_raising(self):
         scope=functions("check_version")
         scope.update(re=re,_installed_version=lambda:"1.2.3.4",_skill_file=lambda name:name,
+                     os=SimpleNamespace(path=SimpleNamespace(exists=lambda path:False)),_profile_backup_path=lambda:"backup",
                      open=mock_open(read_data="Tested with Enscape 9.8.7.6.\n"))
-        self.assertEqual(scope["check_version"](),dict(installed="1.2.3.4",tested="9.8.7.6",match=False))
+        self.assertEqual(scope["check_version"](),dict(installed="1.2.3.4",tested="9.8.7.6",match=False,pending_profile_restore=False))
     def test_match_reads_the_document(self):
         scope=functions("check_version")
         scope.update(re=re,_installed_version=lambda:"1.2.3.4",_skill_file=lambda name:name,
+                     os=SimpleNamespace(path=SimpleNamespace(exists=lambda path:False)),_profile_backup_path=lambda:"backup",
                      open=mock_open(read_data="Tested with Enscape 1.2.3.4.\n"))
         self.assertTrue(scope["check_version"]()["match"])
 
@@ -39,6 +41,7 @@ class Application(unittest.TestCase):
         self.scope.update(math=math,settings_schema=lambda:{"categories":{"illumination":entries,"general":general}},
             _read_defaults=lambda:{"SunPower":80,"UseDlss":True},
             sc=SimpleNamespace(sticky={}),PRESET_KEY="preset",GENERAL_KEY="general",
+            os=SimpleNamespace(path=SimpleNamespace(exists=lambda path:False)),_profile_backup_path=lambda:"backup",
             configure_preset=Mock(),configure_general=Mock(),restore_settings=Mock())
     def test_invalid_merge_writes_nothing(self):
         with self.assertRaisesRegex(ValueError,"SunPower"):self.scope["apply_defaults"]({"SunPower":501})
