@@ -1,155 +1,99 @@
 ---
 name: bc-enscape
 description: >-
-  Enscape renders from Rhino with the Enscape window hidden, driven through Rook: every visual and
-  rendering setting under script control, a default render sheet, PNG plus optional depth, material
-  and object ID channels, and an optional sunlight overlay on a Rhino screenshot. Use when the user
-  asks for an Enscape render of a Rhino view, a sun or shadow study in Enscape, a change to Enscape
-  render settings or defaults, or a Rhino screenshot with an Enscape lighting overlay.
+  Run Enscape renders from Rhino driven through Rook. Use when the user asks for an Enscape render
+  of a Rhino view.
 ---
 <!-- bc-enscape-skill-loaded-marker -->
 
 # bc-enscape
 
-Rook runs [enscape_background.py](scripts/enscape_background.py) inside Rhino;
-[lighting_composite.py](scripts/lighting_composite.py) runs on the host for overlays. Codex and
-Claude Code share this folder.
+Renders a Rhino named view in Enscape with the Enscape window hidden. Rook runs
+[enscape_background.py](scripts/enscape_background.py) inside Rhino; settings start from the user's
+sheet [render-defaults.md](render-defaults.md). Tested with Enscape 4.22.0.1361.
 
-Needs Windows, a visible Rhino main window, a licensed Enscape and a GPU. The Enscape window is
-hidden, not headless. The hooks are private Enscape plug-in internals, not the Chaos SDK.
+## Prerequisites
+- Windows, a visible Rhino window with Rook, a licensed Enscape and a GPU.
+- A Rhino named view; the sun position as azimuth and altitude in degrees.
+- An output folder in the project; outputs never go in this skill.
+- Machine lock: if the ai-work-modes skill is installed, take its lock before step 1 and release it
+  after step 6.
 
-Tested with Enscape 4.22.0.1361.
+## Workflow Steps
+Each Rook call returns to Rhino's event loop: poll in later calls, never `.Wait()` or loop.
 
-## Enscape versions
-Enscape updates often, and an update closes Rhino. Before the first render after a start,
-`enscape.check_version()` compares the installed version with the line above. If they differ, run
-the [version test](#version-test) before rendering. It passes: update the line and commit. It fails:
-stop and report what broke; render nothing.
+### Step 1: Bind
+**Intent:** work on the intended Rhino. Ping Rook, list sessions, bind with
+`rhino_set_active_instance`. Record its camera and sun.
 
-## Settings
-- **Defaults:** [render-defaults.md](render-defaults.md) is the user's sheet. Every render starts
-  from it. A value the user names in a request overrides that one setting for that render only.
-  Change the sheet only when the user asks.
-- **Discovery:** `enscape.settings_schema()` lists every setting of the installed Enscape: key,
-  type, bounds or enum names, Enscape default and current value. Use it to name a setting the user
-  describes in words.
-- **Where values come from:** camera position from the Rhino named view, sun position from the
-  Rhino sun, everything else from the sheet and the request.
-- The Rendering group (raytracing, DLSS, denoisers) is user-wide in the Enscape profile and is read
-  when the renderer host process starts. A running host keeps its old values, even through
-  `start_hidden()`: to change them, restart only the bound `Enscape.RendererHost`.
+### Step 2: Version and settings
+**Intent:** load the helper, check the Enscape version, apply the sheet. Through `rhino_execute`:
+```python
+import os, sys
+sys.path.append(os.path.expanduser(r"~\.claude\skills\bc-enscape\scripts"))
+import enscape_background as enscape
+enscape.check_version()
+enscape.apply_defaults({})   # or the request's {key: value}, enum names
+```
+**Notes:**
+- A different version: run the [version test](references/version-test.md) first.
+- `pending_profile_restore` true: call `enscape.restore_settings()` before anything else.
+- Restore the named view in the main viewport. Check the returned values.
 
-## Inputs from the request
-Ask when one is missing.
+### Step 3: Renderer host
+**Intent:** find the renderer of the bound Rhino. With `Get-CimInstance Win32_Process`, take the
+`Enscape.RendererHost` whose `ParentProcessId` is the Rhino PID. Look it up every job.
 
-| Input | Used in |
-|---|---|
-| Rhino document and named view | steps 1, 2 and 5 |
-| Sun azimuth and altitude in degrees | step 5 |
-| Output folder in the project | step 5 and overlay |
-| Settings that differ from the sheet, if any | step 2 |
-| Overlay: output size in pixels and opacity, 0–1 | step 2 and overlay |
+### Step 4: Start
+**Intent:** start Enscape hidden. `enscape.start_hidden(pid)`; `enscape.status()` shows
+`start_task` `RanToCompletion` and `running` true.
 
-## Workflow
-Lock and bind (Rook) → version check, view and settings (Rook) → find the renderer host
-(PowerShell) → start (Rook) → sun and capture (Rook) → check and restore → optional overlay
-(host Python).
-
-Machine lock: if the ai-work-modes skill is installed, take its lock before step 1 and release it
-after step 6. Without it, one agent works alone.
-
-## Render
-Each Rook call returns to Rhino's event loop. Poll in later calls; never block Rhino with `.Wait()`
-or a loop. Limits and failures are in [Troubleshooting](#troubleshooting).
-
-1. **Bind.** Ping Rook and list sessions. With several Rhino windows, bind the intended one with
-   `rhino_set_active_instance`. Record its camera and sun. Never save the model unless asked.
-2. **Version, view and settings.** Import the helper through `rhino_execute`:
-
-   ```python
-   import os, sys
-   sys.path.append(os.path.expanduser(r"~\.claude\skills\bc-enscape\scripts"))
-   import enscape_background as enscape
-   ```
-
-   Run `enscape.check_version()` ([Enscape versions](#enscape-versions)). If it reports
-   `pending_profile_restore` true, an earlier job ended before restoring: call
-   `enscape.restore_settings()` first. Restore the named view in
-   the main viewport, not a floating one. Call `enscape.apply_defaults(overrides)` with the
-   request's changes as `{key: value}` (enum names, not numbers), or `{}`. For an overlay, pass
-   `enscape.lighting_overrides(width_px, height_px)`: orthographic, white mode, transparent, that
-   size. Check: the returned values match the sheet plus the overrides.
-3. **Renderer host.** Find `Enscape.RendererHost` with `Get-CimInstance Win32_Process` and take
-   the one whose `ParentProcessId` is the bound Rhino PID. Look it up each job; never reuse a PID.
-4. **Start.** `enscape.start_hidden(renderer_process_id)`.
-   Check: `enscape.status()` shows `start_task` `RanToCompletion` and `running` true.
-5. **Sun and capture.** Set the sun with `sc.doc.Lights.Sun.SetPosition(azimuth_deg, altitude_deg)`
-   after `import scriptcontext as sc`; turn on the sun or manual control if needed. Call
-   `enscape.prepare_capture(named_view)`, which sends that view's camera and the Rhino sun to
-   Enscape. Check: `enscape.preparation_status()` shows `preparation` `RanToCompletion`. Then call
-   `enscape.request_capture(absolute_new_png_path)`.
-   Check: `enscape.collect_capture()` returns every file the capture wrote and their pixel size.
-   With `ExportBackgroundMask` on, that is the PNG plus `_alphaMask`, `_depth`, `_materialId` and
-   `_objectId` PNGs.
-6. **Check and restore.** Open the image. Restore camera and sun. Call `enscape.restore_settings()`.
-   It restores the presets and the profile, the profile from a backup in `%LOCALAPPDATA%\bc-enscape\`
-   that survives a Rhino restart. It raises one error naming every restore whose readback differs. If this job started the
-   renderer, close only that renderer's window, then call `enscape.stop_monitor()`. Outputs stay in
-   the project, never in this skill.
-
-## Version test
-On a scratch scene, never a project model: a new Rhino file in a new test folder, one box
-(3 m, real scale) and one named view. Then follow steps 2–4 and call
-`enscape.version_test(absolute_new_output_folder)`. It checks the sheet against the schema, sets,
-reads back and restores one setting per category, and makes one capture. It runs in steps: call it
-again with the same folder in later Rook calls until it returns `complete` true. Look at the capture.
-
-## Sunlight overlay (optional)
-In a new project output folder, prepare three images of the same size and projection, with the
-names the script expects:
-- `rhino-base.png`: the Rhino screenshot;
-- `rhino-mask.png`: RGBA, geometry only, annotations hidden, restored afterwards;
-- `enscape-orthographic.png`: the transparent white-mode render from step 5.
-
-Run with a host Python that has `numpy`, `opencv-python`, `Pillow` and `psd-tools`:
-
-```powershell
-py -3.14 "$HOME\.claude\skills\bc-enscape\scripts\lighting_composite.py" "<project-output-folder>" --opacity <0-1>
+### Step 5: Sun and capture
+**Intent:** render the view.
+```python
+import scriptcontext as sc
+sc.doc.Lights.Sun.SetPosition(azimuth_deg, altitude_deg)   # turn the sun on if needed
+enscape.prepare_capture(named_view)          # poll enscape.preparation_status()
+enscape.request_capture(absolute_new_png_path)
+enscape.collect_capture()                    # poll: files and pixel sizes
 ```
 
-It writes an overlay PNG, a composite PNG, a two-layer PSD, a comparison PNG and a validation JSON,
-and refuses to overwrite existing outputs. Alignment allows only uniform scale and translation and
-needs at least 99% overlap of the outer silhouettes. Openings enclosed by the silhouette, such as
-glazing, are left out of that check and stay transparent in the overlay. Look at the composite
-before reporting.
+### Step 6: Restore
+**Intent:** leave Rhino and Enscape as found. Open the image. Restore camera and sun.
+`enscape.restore_settings()` restores presets and profile and raises one error naming every failed
+readback. If this job started the renderer, close only its window, then `enscape.stop_monitor()`.
 
-The overlay is a grayscale Multiply layer taken from white-mode shading: it only darkens the base
-and is not a true light or shadow pass. Photoshop is not needed.
+## Parameters to Expose
+- `named_view`: the Rhino named view (no default; ask).
+- `azimuth_deg`, `altitude_deg`: sun position (no default; ask).
+- `output_folder`: in the project (no default; ask).
+- `overrides`: `{key: value}` settings for this render only (default: `{}`; the sheet holds the
+  rest). Names, types and bounds: [settings.md](references/settings.md).
 
-## Limits
-- Output is PNG only: Enscape's Rhino capture route ignores `ScreenshotDefaultExtension`. No normal
-  channel and no JSON sidecar come out of this route.
-- Video and panorama settings are in the sheet but untested.
+## Gotchas
+- Never save the Rhino model unless asked.
+- Camera comes from the named view and sun from the Rhino sun, not from the sheet.
+- Raytracing, DLSS and denoisers are user-wide and read at renderer start
+  ([settings.md](references/settings.md)).
+- Clipped views are refused for now.
+- Rook resets `sys.path` between calls: keep the path lines in every call that imports. After a
+  skill update in a running Rhino, `importlib.reload` the changed modules, then the facade.
 
-## Troubleshooting
-| Symptom | Action |
-|---|---|
-| Start, preparation or capture not done after 120 s, or an error | Stop polling; read `enscape.status()` and the host's Enscape logs. Never resubmit blindly. |
-| Startup stalls on a cached GPU-query timeout | Read the selected host's logs; restarting only that idle renderer host has recovered it. Never end Rhino or another session's host. |
-| A window flashes at startup | Expected; the script hides it within 100 ms. |
-| `restore_settings` refuses the profile backup | The profile changed outside the job since the backup; the backup is kept. Tell the user; never overwrite their change. |
-| `apply_defaults` names a sheet line or a missing key | The sheet was edited wrongly: report the line; render nothing until it is fixed. |
-| Internal export error at capture | The view reference is missing: run `prepare_capture` before `request_capture`. |
-| `prepare_capture` refuses clipping planes | The helper handles unclipped views only; a clipped view needs its own capture context. |
-| Annotations show in `rhino-mask.png` | Rhino keeps the current layer visible: make a non-annotation layer current before hiding. |
-| Overlay alignment fails | Fix the camera so the Rhino and Enscape views match; never loosen the check. |
+## References
+- [Settings](references/settings.md): the sheet, overrides, schema, user-wide settings, restore
+- [Version test](references/version-test.md): after an Enscape update
+- [Image overlay](references/image-overlay.md): stack a render, its channels and Rhino screenshots
+- [Troubleshooting](references/troubleshooting.md): stalls, refusals, errors
+- [Maintaining](references/skill-maintaining.md): Git, what goes in the skill
 
-## Maintaining the skill
-This folder is the Git repo `github.com/bai-ting-chen/bc-enscape` (private), shared by several
-machines.
-1. Before editing: `git pull --ff-only origin main`. If it refuses, stop and report; never force-push.
-2. Identity, set once per clone: `git config user.name bai-ting-chen`,
-   `git config user.email baitingchen.arch@gmail.com`.
-3. After a change: commit (what changed and why), then `git push origin main`. Only method and code
-   go in; never project files, renders or values from one scene (sizes, sun angles, view names).
-   The user's house defaults live only in [render-defaults.md](render-defaults.md).
+| Topic | Reference | Code |
+|---|---|---|
+| Render inside Rhino | this file | `scripts/enscape_background.py` (imports only), `enscape_bridge.py`, `enscape_renderer.py`, `enscape_capture.py` |
+| Settings and sheet | `references/settings.md` | `render-defaults.md`, `scripts/enscape_sheet.py`, `enscape_settings.py`, `enscape_defaults.py`, `enscape_presets.py`, `enscape_general.py`, `enscape_profile.py` |
+| Version test | `references/version-test.md` | `scripts/enscape_version.py`, `enscape_version_test.py` |
+| Image overlay (host Python) | `references/image-overlay.md` | `scripts/image_overlay.py` |
+
+## Example Output
+A PNG at `absolute_new_png_path` at the sheet's resolution. With `ExportBackgroundMask` on, also
+`_alphaMask`, `_depth`, `_materialId` and `_objectId` PNGs on the same grid. PNG only: the Rhino
+capture route ignores `ScreenshotDefaultExtension`; no normal channel.
