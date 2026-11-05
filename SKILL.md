@@ -4,8 +4,9 @@ description: >-
   Run Enscape renders from Rhino driven through Rook. Use when the user asks for an Enscape render
   of a Rhino view, and also whenever they mention Enscape together with Rhino: a sun or shadow
   study, a section or several views rendered in one go, a change to Enscape render settings or
-  their defaults, depth, material or object ID channels, or overlaying an Enscape render or its
-  channels on a Rhino screenshot, even if they do not say "render".
+  their defaults, creating or editing Enscape materials, depth, material or object ID channels,
+  or overlaying an Enscape render or its channels on a Rhino screenshot, even if they do not say
+  "render".
 ---
 <!-- bc-enscape-skill-loaded-marker -->
 
@@ -92,6 +93,8 @@ readback. If this job started the renderer, close only its window, then `enscape
 - Camera comes from the named view and sun from the Rhino sun, not from the sheet.
 - Raytracing, DLSS and denoisers are user-wide and read at renderer start
   ([settings.md](references/settings.md)).
+- After creating, assigning or editing a material, call `enscape.refresh_materials()` before the
+  capture: Enscape's live sync keeps the old material otherwise.
 - `check_version()` finds the tested version only on its own line, as above.
 - Rook resets `sys.path` between calls: keep the path lines in every call that imports. After a
   skill update in a running Rhino, `importlib.reload` the changed modules, then the facade.
@@ -99,6 +102,7 @@ readback. If this job started the renderer, close only its window, then `enscape
 ## References
 - [Settings](references/settings.md): the sheet, overrides, schema, user-wide settings, restore
 - [Version test](references/version-test.md): after an Enscape update
+- [Enscape materials](references/enscape-materials.md): list, create and edit materials before a render
 - [Image overlay](references/image-overlay.md): stack a render, its channels and Rhino screenshots
 - [Troubleshooting](references/troubleshooting.md): stalls, refusals, errors
 - [Maintaining](references/skill-maintaining.md): Git, what goes in the skill
@@ -107,6 +111,7 @@ readback. If this job started the renderer, close only its window, then `enscape
 |---|---|---|
 | Render inside Rhino | this file | `scripts/enscape_background.py` (imports only), `enscape_bridge.py`, `enscape_renderer.py`, `enscape_capture.py`, `enscape_views.py` |
 | Settings and sheet | `references/settings.md` | `render-defaults.md`, `scripts/enscape_sheet.py`, `enscape_settings.py`, `enscape_defaults.py`, `enscape_presets.py`, `enscape_general.py`, `enscape_profile.py` |
+| Enscape materials | `references/enscape-materials.md` | `scripts/enscape_materials.py` |
 | Version test | `references/version-test.md` | `scripts/enscape_version.py`, `enscape_version_test.py` |
 | Image overlay (host Python) | `references/image-overlay.md` | `scripts/image_overlay.py` |
 
