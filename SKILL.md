@@ -36,7 +36,8 @@ stop and report what broke; render nothing.
 - **Where values come from:** camera position from the Rhino named view, sun position from the
   Rhino sun, everything else from the sheet and the request.
 - The Rendering group (raytracing, DLSS, denoisers) is user-wide in the Enscape profile and is read
-  when the renderer starts: apply it before step 4, or restart the renderer.
+  when the renderer host process starts. A running host keeps its old values, even through
+  `start_hidden()`: to change them, restart only the bound `Enscape.RendererHost`.
 
 ## Inputs from the request
 Ask when one is missing.
@@ -97,7 +98,8 @@ or a loop. Limits and failures are in [Troubleshooting](#troubleshooting).
 On a scratch scene, never a project model: a new Rhino file in a new test folder, one box
 (3 m, real scale) and one named view. Then follow steps 2–4 and call
 `enscape.version_test(absolute_new_output_folder)`. It checks the sheet against the schema, sets,
-reads back and restores one setting per category, and makes one capture. Look at the capture.
+reads back and restores one setting per category, and makes one capture. It runs in steps: call it
+again with the same folder in later Rook calls until it returns `complete` true. Look at the capture.
 
 ## Sunlight overlay (optional)
 In a new project output folder, prepare three images of the same size and projection, with the
