@@ -13,7 +13,9 @@ description: >-
 
 Renders a Rhino named view in Enscape with the Enscape window hidden. Rook runs
 [enscape_background.py](scripts/enscape_background.py) inside Rhino; settings start from the user's
-sheet [render-defaults.md](render-defaults.md). Tested with Enscape 4.22.0.1361.
+sheet [render-defaults.md](render-defaults.md).
+
+Tested with Enscape 4.22.0.1361.
 
 ## Prerequisites
 - Windows, a visible Rhino window with Rook, a licensed Enscape and a GPU.
@@ -55,14 +57,20 @@ windows have their own hosts, and a PID from an earlier job may now belong to an
 `start_task` `RanToCompletion` and `running` true.
 
 ### Step 5: Sun and capture
-**Intent:** render the view.
+**Intent:** render the views, in order, with one renderer start and one restore.
 ```python
 import scriptcontext as sc
 sc.doc.Lights.Sun.SetPosition(azimuth_deg, altitude_deg)   # turn the sun on if needed
-enscape.prepare_capture(named_view)          # poll enscape.preparation_status()
-enscape.request_capture(absolute_new_png_path)
-enscape.collect_capture()                    # poll: files and pixel sizes
+views = [("view-a", r"<project>\renders\view-a.png"),      # absolute new PNG paths
+         ("view-b", r"<project>\renders\view-b.png")]
+result = enscape.capture_views(views)
 ```
+**Notes:**
+- Call `capture_views` again with the same list in later Rook calls until `result["complete"]` is
+  true; read `passed`, `failed_view` and `views` (files and pixel sizes per view).
+- A failed view stops the job and is named; earlier images stay. The camera is restored at the end.
+- A named view saved with clipping planes renders as a section: Enscape reads the planes from the
+  view itself, so planes elsewhere in the document do not cut it.
 
 ### Step 6: Restore
 **Intent:** leave Rhino and Enscape as found: the sheet's values are written into the document's
@@ -72,7 +80,7 @@ own Enscape sessions, would inherit them. Open the image. Restore camera and sun
 readback. If this job started the renderer, close only its window, then `enscape.stop_monitor()`.
 
 ## Parameters to Expose
-- `named_view`: the Rhino named view (no default; ask).
+- `views`: Rhino named views and their output PNGs, in order (no default; ask).
 - `azimuth_deg`, `altitude_deg`: sun position (no default; ask).
 - `output_folder`: in the project (no default; ask).
 - `overrides`: `{key: value}` settings for this render only (default: `{}`; the sheet holds the
@@ -84,7 +92,7 @@ readback. If this job started the renderer, close only its window, then `enscape
 - Camera comes from the named view and sun from the Rhino sun, not from the sheet.
 - Raytracing, DLSS and denoisers are user-wide and read at renderer start
   ([settings.md](references/settings.md)).
-- Clipped views are refused for now.
+- `check_version()` finds the tested version only on its own line, as above.
 - Rook resets `sys.path` between calls: keep the path lines in every call that imports. After a
   skill update in a running Rhino, `importlib.reload` the changed modules, then the facade.
 
@@ -97,12 +105,12 @@ readback. If this job started the renderer, close only its window, then `enscape
 
 | Topic | Reference | Code |
 |---|---|---|
-| Render inside Rhino | this file | `scripts/enscape_background.py` (imports only), `enscape_bridge.py`, `enscape_renderer.py`, `enscape_capture.py` |
+| Render inside Rhino | this file | `scripts/enscape_background.py` (imports only), `enscape_bridge.py`, `enscape_renderer.py`, `enscape_capture.py`, `enscape_views.py` |
 | Settings and sheet | `references/settings.md` | `render-defaults.md`, `scripts/enscape_sheet.py`, `enscape_settings.py`, `enscape_defaults.py`, `enscape_presets.py`, `enscape_general.py`, `enscape_profile.py` |
 | Version test | `references/version-test.md` | `scripts/enscape_version.py`, `enscape_version_test.py` |
 | Image overlay (host Python) | `references/image-overlay.md` | `scripts/image_overlay.py` |
 
 ## Example Output
-A PNG at `absolute_new_png_path` at the sheet's resolution. With `ExportBackgroundMask` on, also
+One PNG per view at the sheet's resolution. With `ExportBackgroundMask` on, also
 `_alphaMask`, `_depth`, `_materialId` and `_objectId` PNGs on the same grid. PNG only: the Rhino
 capture route ignores `ScreenshotDefaultExtension`; no normal channel.

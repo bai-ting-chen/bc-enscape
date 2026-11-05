@@ -8,5 +8,6 @@
 | `restore_settings` refuses the profile backup | The profile changed outside the job; the backup is kept. Tell the user; never overwrite their change. |
 | `apply_defaults` names a sheet line or a missing key | The sheet was edited wrongly: report the line; render nothing until it is fixed. |
 | Internal export error at capture | The view reference is missing: run `prepare_capture` before `request_capture`. |
-| `prepare_capture` refuses clipping planes | Clipped views are not supported yet. |
+| `capture_views` names a `failed_view` | Read `enscape.status()` for that view; earlier images are kept. Fix it, then run a new list starting at that view. |
+| A section shows no cut | Check the named view's saved clipping planes and its `section_plane_count`. |
 | Overlay problems | [image-overlay.md](image-overlay.md) › Rules |
