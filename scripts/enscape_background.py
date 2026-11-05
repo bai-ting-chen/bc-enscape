@@ -85,6 +85,7 @@ from enscape_capture import (
     request_capture,
     collect_capture,
 )
+from enscape_views import capture_views
 from enscape_version_test import (
     VERSION_TEST_KEY,
     _probe_value,

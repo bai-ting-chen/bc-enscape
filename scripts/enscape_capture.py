@@ -1,5 +1,4 @@
 """Prepare, request and collect asynchronous image captures."""
-import Rhino
 import System
 import os
 import scriptcontext as sc
@@ -13,8 +12,8 @@ def prepare_capture(named_view):
     """Send the exact named camera, Rhino sun and named-view context to Enscape."""
     if sc.doc.NamedViews.FindByName(named_view) < 0:
         raise ValueError("Named view does not exist in the bound document")
-    if any(obj.ObjectType == Rhino.DocObjects.ObjectType.ClipPlane for obj in sc.doc.Objects):
-        raise ValueError("Clipping planes require an explicit capture context; this helper handles unclipped views")
+    if "capture_task" in sc.sticky[KEY]:
+        raise ValueError("Collect the pending capture before preparing another view")
     current = services()["state"].CurrentState
     provider = service_provider()
     constructor = find_type("Enscape.Rhino.Plugin.Views.RhinoView").GetConstructors()[0]
@@ -38,19 +37,35 @@ def prepare_capture(named_view):
     content.Camera = state["capture_view"].GetCamera()
     sun_parser = provider.GetService(find_type("Enscape.Rhino.Plugin.Views.RhinoSunParser"))
     content.SunPosition = sun_parser.ParseSun(sc.doc)
-    planes = System.Activator.CreateInstance(find_type("Enscape.Cad.Views.GlobalSectionPlanes"))
-    planes.SectionPlanes = System.Array.CreateInstance(find_type("GlmSharp.dvec4"), 0)
-    content.GlobalSectionPlanes = planes
-    state["context_task"] = current.LiveViewport.LiveViewport.InitializeContextAsync(context, content, True)
+    state["capture_context"] = context
+    state["capture_content"] = content
+    state["capture_viewport"] = current.LiveViewport.LiveViewport
+    state.pop("context_task", None)
+    # Enscape restores this named view into a disposable viewport and uses its
+    # own parser for the associated planes, including units and section depth.
+    state["section_task"] = state["capture_view"].GetViewSectionPlanesAsync()
     return preparation_status()
 
 
 def preparation_status():
     state = sc.sticky[KEY]
+    if "section_task" in state:
+        sections = state["section_task"]
+        if sections.IsFaulted or sections.IsCanceled:
+            raise RuntimeError(str(sections.Exception) if sections.IsFaulted else "Section discovery canceled")
+        if not sections.IsCompleted:
+            return {"preparation": str(sections.Status)}
+        planes = System.Activator.CreateInstance(find_type("Enscape.Cad.Views.GlobalSectionPlanes"))
+        planes.SectionPlanes = sections.Result.SectionPlanes
+        state["section_plane_count"] = len(planes.SectionPlanes)
+        state["capture_content"].GlobalSectionPlanes = planes
+        state["context_task"] = state["capture_viewport"].InitializeContextAsync(
+            state["capture_context"], state["capture_content"], True)
+        del state["section_task"]
     task = state["context_task"]
     if task.IsFaulted or task.IsCanceled:
         raise RuntimeError(str(task.Exception))
-    return {"preparation": str(task.Status)}
+    return {"preparation": str(task.Status), "section_plane_count": state.get("section_plane_count", 0)}
 
 
 def screenshot_files():

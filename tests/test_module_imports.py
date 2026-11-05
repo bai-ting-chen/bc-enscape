@@ -10,7 +10,7 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 PUBLIC_NAMES = """
 ACTIVE_PRESET_ID BOUNDS CATEGORIES FLAGS GENERAL_KEY KEY PRESET_KEY Rhino
 SETTINGS_READER SHEET_OMITTED_VISUAL_KEYS System VERSION_TEST_KEY apply_defaults
-base64 check_version collect_capture configure_general configure_preset ctypes
+base64 capture_views check_version collect_capture configure_general configure_preset ctypes
 embedded_presets find_type forms json lighting_overrides math os preparation_status
 prepare_capture profile_bytes profile_path re request_capture resolved_settings
 restore_general restore_preset restore_settings sc screenshot_files service_provider
