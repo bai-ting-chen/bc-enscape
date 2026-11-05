@@ -143,12 +143,15 @@ BOUNDS = {
     "ColorTemperature": (1500, 15000, "K"),
     "LightViewMinimum": (0.1, 9999, "lux"), "LightViewMaximum": (100, 120000, "lux"),
     "SunPower": (0, 500, "%"), "StarsMoonPower": (0, 300, "%"),
-    "LightBrightness": (0, 200, "%"), "WindDirectionAngle": (None, 360, "degrees"),
-    "HorizonRotation": (None, 360, "degrees"),
+    "LightBrightness": (0, 200, "%"), "WindDirectionAngle": (0, 360, "degrees"),
+    "HorizonRotation": (0, 360, "degrees"),
     "SkyboxNormalizeBrightness": (0.1, 250000, "lux"), "MoonSize": (100, 1000, "%"),
-    "CloudContrails": (None, 30, "count"), "CloudX": (0, 10000, "m"),
-    "CloudY": (None, 10000, "m"), "ScreenshotDepthRange": (1, 10000, "m"),
+    "CloudContrails": (0, 30, "count"), "CloudX": (0, 10000, "m"),
+    "CloudY": (0, 10000, "m"), "ScreenshotDepthRange": (1, 10000, "m"),
     "ScreenshotResolutionX": (500, 8192, "px"), "ScreenshotResolutionY": (500, 8192, "px"),
+    "MouseSpeedMultiplier": (0.3, 3, "factor"), "MouseSmoothing": (1, 10, "unknown"),
+    "MoveSpeedMultiplier": (0.1, 3, "factor"), "CameraMovementSmoothing": (0, 7, "unknown"),
+    "SpectatorHeight": (1, 2.1, "m"), "SpectatorWidth": (0.2, 1, "m"),
 }
 for _key in "MotionBlur LensflareIntensity BloomIntensity VignetteIntensity ChromaticAberration GodraysDensity AmbientAmount WindIntensity CloudDensity CloudVariety CloudCirrusAmount OutlineThickness Jitter ExtendedLines SurfaceDetail ColorGradient BleedingColor PolystyrolTransmission DofStrength ExposureBrightness ShadowSharpness".split():
     BOUNDS[_key] = (0, 100, "%")

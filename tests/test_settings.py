@@ -26,6 +26,7 @@ class Validation(unittest.TestCase):
             dict(key="Size", type="UInt32", enum={}, writable=True, range=dict(min=500,max=8192)),
             dict(key="UnknownFloat", type="Single", enum={}, writable=True, range=dict(min="unknown",max="unknown")),
             dict(key="Mode", type="RenderingStyle", enum={"WHITE":1}, writable=True, range={}),
+            dict(key="Flags", type="Categories", enum={"Vegetation":1,"People":2}, flags=True, writable=True, range={}),
             dict(key="Format", type="String", enum={}, writable=False, range={}),
             dict(key="Bool", type="Boolean", enum={}, writable=True, range={}),
         ]
@@ -34,6 +35,10 @@ class Validation(unittest.TestCase):
         for values in ({"Size":499}, {"Size":8193}, {"Size":True}, {"Mode":1}, {"Mode":"BAD"}, {"Bool":1}, {"Format":"png"}, {"missing":1}, {"UnknownFloat":float("nan")}):
             with self.subTest(values=values), self.assertRaises(ValueError):
                 self.scope["validate_settings"](values)
+    def test_flag_names_combine_without_accepting_integers(self):
+        self.assertEqual(self.scope["validate_settings"]({"Flags":"Vegetation, People"}), {"Flags":3})
+        with self.assertRaises(ValueError):
+            self.scope["validate_settings"]({"Flags":3})
     def test_unknown_bound_keeps_numeric_values(self):
         self.assertEqual(self.scope["validate_settings"]({"UnknownFloat":-123}), {"UnknownFloat":-123})
     def test_single_storage_overflow(self):
