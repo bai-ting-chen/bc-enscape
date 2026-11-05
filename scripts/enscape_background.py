@@ -76,8 +76,11 @@ from enscape_defaults import (
 from enscape_renderer import (
     start_hidden,
     status,
-    stop_monitor,
+    close_renderer,
 )
+from enscape_job import set_sun, restore_job
+from enscape_host import restart_renderer_host
+from enscape_rhino_capture import capture_rhino_overlay
 from enscape_capture import (
     prepare_capture,
     preparation_status,
@@ -94,6 +97,8 @@ from enscape_materials import (
     create_material,
     edit_material,
     refresh_materials,
+    assign_material,
+    undo_material_changes,
 )
 from enscape_version_test import (
     VERSION_TEST_KEY,

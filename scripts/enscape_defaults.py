@@ -9,6 +9,9 @@ from enscape_settings import settings_schema, validate_settings
 from enscape_sheet import SHEET_OMITTED_VISUAL_KEYS, _read_defaults
 
 
+DEFAULTS_KEY = "bc_enscape_applied_defaults"
+
+
 def _check_sheet_complete(values):
     schema = settings_schema()["categories"]
     expected = {entry["key"] for category, entries in schema.items() if category != "general"
@@ -45,6 +48,8 @@ def apply_defaults(overrides):
     _check_sheet_complete(values)
     values.update(overrides)
     visual, general = _split_settings(values)
+    from enscape_job import remember_job
+    remember_job()
     try:
         # The preset records the modified profile as its own restoration baseline.
         if general:
@@ -54,12 +59,13 @@ def apply_defaults(overrides):
     except Exception:
         restore_settings()
         raise
+    sc.sticky[DEFAULTS_KEY] = {"visual": visual, "overrides": dict(overrides)}
     return values
 
 
 def lighting_overrides(width_px, height_px):
     """Return overlay settings to merge with the sheet via apply_defaults."""
-    return {"RenderingStyle": "WHITE", "ProjectionMode": "ORTHOGRAPHIC",
+    return {"RenderingStyle": "WHITE",
             "ScreenshotResolution": "CUSTOM", "ScreenshotResolutionX": width_px,
             "ScreenshotResolutionY": height_px, "ScreenshotViewportAspectRatio": False,
             "ApplyAlphaChannelDuringImageExport": True, "ExportBackgroundMask": False,
@@ -79,4 +85,5 @@ def restore_settings():
             failures.append(name + ": " + str(error))
     if failures:
         raise RuntimeError("Settings restoration failed: " + "; ".join(failures))
+    sc.sticky.pop(DEFAULTS_KEY, None)
     return result

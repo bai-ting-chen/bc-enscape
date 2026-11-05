@@ -17,7 +17,9 @@ enscape.read_material("name")
 enscape.validate_material("Default", {"Roughness": 0.8})    # checks only, writes nothing
 enscape.create_material("Default", "name", {"DiffuseColor": [220, 30, 20], "Roughness": 0.95})
 enscape.edit_material("name", {"Roughness": 0.02})          # MaterialType takes an enum name
+enscape.assign_material("name", object_ids=[object_id])      # or layer_full_path="A::B"
 enscape.refresh_materials()         # then capture_views in a later Rook call
+enscape.undo_material_changes()     # only for try-outs; see Keep or undo
 ```
 Every write is validated against the schema first and read back after; an unknown key, a bad value
 or a missing texture file fails before anything is written.
@@ -26,8 +28,8 @@ or a missing texture file fails before anything is written.
   `Glass`. Use `materials_schema()` for the keys of each.
 - **Units:** colours are RGB 0–255; roughness, metallic, specular, opacity and most controls are
   0–1; emission is cd/m²; texture rotation is in radians.
-- **Assign** with Rhino, not the helper: an object's `RenderMaterial` with its material source set
-  to the object, or a layer's `RenderMaterial`, then `CommitChanges()`.
+- **Assign** with `assign_material` to objects (by id) or a layer (by full path); it records the
+  original render material and material source.
 
 ## Why refresh
 Enscape's live sync keeps showing the old material after a create, assign or edit, and waiting
@@ -36,9 +38,9 @@ change. Call it after the last material change and before `capture_views`.
 
 ## Keep or undo
 Unlike render settings, material changes the user asked for stay in the document: they are model
-content, not render-time state. Changes made only to try something out are undone at the end:
-read the material first with `read_material`, delete what was created, write back what was
-edited. Save the model only when the user asks.
+content, not render-time state. Changes made only to try something out are undone at the end with
+`undo_material_changes()`: it puts this session's assignments back, writes back what was edited,
+then deletes what was created. Save the model only when the user asks.
 
 ## Limits
 - Seen working in renders: all eight types, and albedo, bump, roughness and transparency-mask

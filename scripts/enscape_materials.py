@@ -1,4 +1,4 @@
-"""Discover and edit Enscape Rhino render content; assignments belong to Rhino.
+"""Discover, edit and reversibly assign Enscape Rhino render content.
 
 Run inside Rhino through Rook. Public numeric values use Enscape storage units:
 fractions, RGB bytes, radians for texture rotation, and cd/m2 for emission.
@@ -10,6 +10,18 @@ import os
 
 _TYPE_NAME = "Enscape.Rhino.Plugin.Materials.EnscapeRenderMaterial"
 _TYPE_ID = "a040e9d1-853f-435f-bfb8-5cc4fd88c617"
+_CHANGES_KEY = "bc_enscape_material_changes"
+
+
+def _changes():
+    import scriptcontext as sc
+    state = sc.sticky.get(_CHANGES_KEY)
+    if state is None:
+        state = {"document": sc.doc.RuntimeSerialNumber, "assignments": {}, "edited": {}, "created": {}}
+        sc.sticky[_CHANGES_KEY] = state
+    if state["document"] != sc.doc.RuntimeSerialNumber:
+        raise ValueError("Undo or keep the previous document's material changes before switching documents")
+    return state
 
 
 def _installed_type(name):
@@ -297,6 +309,7 @@ def _write_material(material, material_type, name, parameters):
         material = system.Activator.CreateInstance(runtime_type)
     # Retain raw fields, including both legacy type slots, for exact rollback.
     before = [(item.Value, item.Value.GetValue(material)) for item in definitions]
+    changes = _changes()
     undo = doc.BeginUndoRecord("Enscape material " + ("create" if create else "edit"))
     added = False
     try:
@@ -318,6 +331,11 @@ def _write_material(material, material_type, name, parameters):
         actual = _read_material(_find_material(name))
         if actual["type"] != material_type or any(actual["parameters"][k] != v for k, v in parameters.items()):
             raise RuntimeError("Material readback differs from the validated request")
+        identifier = str(material.Id)
+        if create:
+            changes["created"][identifier] = material
+        elif identifier not in changes["created"]:
+            changes["edited"].setdefault(identifier, (material, before))
         doc.Views.Redraw()
         return actual
     except Exception:
@@ -353,6 +371,110 @@ def create_material(material_type, name, parameters):
     if _find_material(name, required=False) is not None:
         raise ValueError("Material already exists: " + name)
     return _write_material(None, material_type, name, values)
+
+
+def _assignment_values(target, kind):
+    material = target.RenderMaterial
+    return (str(material.Id) if material else None,
+            str(target.Attributes.MaterialSource) if kind == "object" else None,
+            target.Attributes.MaterialIndex if kind == "object" else target.RenderMaterialIndex)
+
+
+def assign_material(name, object_ids=None, layer_full_path=None):
+    """Assign to object IDs or one exact layer full path, retaining first assignments."""
+    rhino, system, doc, _, _ = _runtime()
+    material = _find_material(name)
+    _read_material(material)
+    if (object_ids is None) == (layer_full_path is None):
+        raise ValueError("Supply object_ids or layer_full_path, exclusively")
+    if object_ids is not None:
+        if not object_ids:
+            raise ValueError("Supply at least one object ID")
+        targets = [("object", doc.Objects.FindId(system.Guid(str(value)))) for value in object_ids]
+    else:
+        targets = [("layer", layer) for layer in doc.Layers if layer.FullPath == layer_full_path]
+        if len(targets) != 1:
+            raise ValueError("Expected one exact layer full path: " + str(layer_full_path))
+    if any(target is None or target.IsDeleted for _, target in targets):
+        raise ValueError("Assignment target does not exist")
+    state = _changes()
+    undo = doc.BeginUndoRecord("Assign Enscape material")
+    try:
+        for kind, target in targets:
+            key = (kind, str(target.Id))
+            state["assignments"].setdefault(key, {"kind": kind, "target": target,
+                "material": target.RenderMaterial, "values": _assignment_values(target, kind),
+                "attributes": target.Attributes.Duplicate() if kind == "object" else None})
+            target.RenderMaterial = material
+            if kind == "object":
+                target.Attributes.MaterialSource = rhino.DocObjects.ObjectMaterialSource.MaterialFromObject
+            committed = target.CommitChanges()
+            # Layer.RenderMaterial commits immediately; its following commit can return false.
+            if kind == "object" and not committed:
+                raise RuntimeError("Assignment commit failed: " + str(target.Id))
+            actual = doc.Objects.FindId(target.Id) if kind == "object" else doc.Layers[target.Index]
+            if str(actual.RenderMaterial.Id) != str(material.Id) or (kind == "object" and
+                    actual.Attributes.MaterialSource != rhino.DocObjects.ObjectMaterialSource.MaterialFromObject):
+                raise RuntimeError("Material assignment readback differs: " + str(target.Id))
+        doc.Views.Redraw()
+    finally:
+        if undo:
+            doc.EndUndoRecord(undo)
+    return {"assigned": len(targets), "material": name}
+
+
+def undo_material_changes():
+    """Restore assignments, then raw edited fields, then remove created materials."""
+    import scriptcontext as sc
+    state = sc.sticky.get(_CHANGES_KEY)
+    if state is None:
+        return {"assignments_restored": 0, "materials_restored": 0, "materials_deleted": 0}
+    rhino, system, doc, _, _ = _runtime()
+    if state["document"] != doc.RuntimeSerialNumber:
+        raise ValueError("Bound document differs from material session")
+    undo = doc.BeginUndoRecord("Undo Enscape material try-outs")
+    result = {"assignments_restored": 0, "materials_restored": 0, "materials_deleted": 0}
+    try:
+        for key, item in list(state["assignments"].items()):
+            kind = item["kind"]
+            target = doc.Objects.FindId(system.Guid(key[1])) if kind == "object" else doc.Layers[item["target"].Index]
+            if kind == "object":
+                if not doc.Objects.ModifyAttributes(target.Id, item["attributes"], True):
+                    raise RuntimeError("Object attributes restore failed: " + key[1])
+                target = doc.Objects.FindId(target.Id)
+            else:
+                if item["material"] is not None:
+                    target.RenderMaterial = item["material"]
+                target.RenderMaterialIndex = item["values"][2]
+                target.CommitChanges()
+            if _assignment_values(target, kind) != item["values"]:
+                raise RuntimeError("Assignment restore readback differs: " + key[1])
+            del state["assignments"][key]
+            result["assignments_restored"] += 1
+        for identifier, (material, fields) in list(state["edited"].items()):
+            material.BeginChange(rhino.Render.RenderContent.ChangeContexts.Program)
+            try:
+                for definition, value in fields:
+                    definition.SetValue(material, value)
+            finally:
+                material.EndChange()
+            if any(not system.Object.Equals(definition.GetValue(material), value) for definition, value in fields):
+                raise RuntimeError("Edited material restore readback differs: " + material.Name)
+            del state["edited"][identifier]
+            result["materials_restored"] += 1
+        for identifier, material in list(state["created"].items()):
+            if not doc.RenderMaterials.Remove(material):
+                raise RuntimeError("Could not delete created material: " + material.Name)
+            if any(str(m.Id) == identifier for m in doc.RenderMaterials):
+                raise RuntimeError("Created material deletion readback differs: " + identifier)
+            del state["created"][identifier]
+            result["materials_deleted"] += 1
+        del sc.sticky[_CHANGES_KEY]
+        doc.Views.Redraw()
+    finally:
+        if undo:
+            doc.EndUndoRecord(undo)
+    return result
 
 
 def edit_material(name, parameters):

@@ -31,7 +31,8 @@ Starting values are Enscape 4.22's factory defaults (261105).
 | OutlineThickness | 0 | 0–100 % |
 
 ## Camera
-Camera position comes from the Rhino named view.
+A named view keeps its own camera, projection and lens; `ProjectionMode` and `FieldOfView` below
+apply to the current viewport (`None`) only.
 
 | Key | Value | Allowed |
 |---|---|---|

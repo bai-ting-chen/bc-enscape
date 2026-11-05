@@ -15,16 +15,17 @@ description: >-
 Tested with Enscape 4.22.0.1361.
 
 ## Running Enscape
-Renders Rhino named views with the Enscape window hidden. Ask for any missing input: named views,
-sun azimuth and altitude in degrees, an output folder in the project. Save the Rhino model only
-when asked: during a job it holds a changed sun, view and temporary Enscape presets.
+Renders Rhino named views, or the current viewport, with the Enscape window hidden. Ask for any
+missing input: views, sun azimuth and altitude in degrees, an output folder in the project. Save
+the Rhino model only when asked: during a job it holds a changed sun, view and temporary Enscape
+presets. Every step is a call below; write no other Rhino, Windows or shell code.
 
 Enscape's tasks only progress while Rhino's event loop runs, between Rook calls: start a task in
 one call and poll it in later calls. A `.Wait()` or a loop inside one call hangs Rhino.
 
-1. **Bind** the intended Rhino (`rhino_set_active_instance`); record its camera and sun.
+1. **Bind** the intended Rhino (`rhino_set_active_instance`).
 2. **Load and apply settings** through `rhino_execute` (Rook resets `sys.path`, so keep the path
-   lines in every call):
+   lines in every call). `apply_defaults` also records the camera, sun and settings for step 5:
    ```python
    import os, sys
    sys.path.append(os.path.expanduser(r"~\.claude\skills\bc-enscape\scripts"))
@@ -34,23 +35,26 @@ one call and poll it in later calls. A `.Wait()` or a loop inside one call hangs
    ```
    `pending_profile_restore` true: call `enscape.restore_settings()` first. `match` false: tell
    the user the installed and tested versions and let them decide whether to run a check
-   (`enscape.version_test(new_folder)` after steps 3–4, called until `complete`) or render anyway.
-3. **Renderer host:** the `Enscape.RendererHost` whose `ParentProcessId` is the bound Rhino PID
-   (`Get-CimInstance Win32_Process`), looked up every job.
-4. **Start:** `enscape.start_hidden(pid)`; poll `enscape.status()` for `running` true.
-5. **Sun and capture:**
+   (`enscape.version_test(new_folder)` after step 3, called until `complete`) or render anyway.
+3. **Start:** `enscape.start_hidden()` finds this Rhino's own renderer and starts it; poll
+   `enscape.status()` until `running` is true.
+4. **Sun and capture:**
    ```python
-   import scriptcontext as sc
-   sc.doc.Lights.Sun.SetPosition(azimuth_deg, altitude_deg)
+   enscape.set_sun(azimuth_deg, altitude_deg)
    result = enscape.capture_views([("view-a", r"<project>\renders\view-a.png"),
-                                   ("view-b", r"<project>\renders\view-b.png")])
+                                   (None, r"<project>\renders\current.png")])
    ```
    Repeat the call in later Rook calls until `result["complete"]`. A failed view stops the job and
-   is named; earlier images stay. A named view saved with clipping planes renders as a section.
-   Output is PNG; with `ExportBackgroundMask` on, also `_alphaMask`, `_depth`, `_materialId` and
-   `_objectId` PNGs on the same grid.
-6. **Restore:** open the images; restore camera and sun; `enscape.restore_settings()`. If this job
-   started the renderer, close only its window, then `enscape.stop_monitor()`.
+   is named; earlier images stay.
+   - **Projection:** a named view keeps its own projection and lens (parallel, perspective or
+     two-point). `None` is the current viewport: it takes the sheet's projection and field of view.
+     A projection the user names overrides both.
+   - **Section:** a view renders cut only by a clipping plane linked to it and turned on.
+   - **Output:** PNG; with `ExportBackgroundMask` on, also `_alphaMask`, `_depth`, `_materialId`
+     and `_objectId` PNGs on the same grid.
+5. **Restore:** open the images; poll `enscape.restore_job()` until `complete`. It restores the
+   camera, sun, settings and profile, closes the renderer this job started, and raises one error
+   naming every readback that differs.
 
 ## Settings
 - **Sheet:** every render starts from the user's sheet
@@ -59,15 +63,15 @@ one call and poll it in later calls. A `.Wait()` or a loop inside one call hangs
 - **Schema:** `enscape.settings_schema()` lists every setting of the installed Enscape: key, type,
   bounds or enum names, Enscape default and current value. Use it to name a setting the user
   describes in words. Pass enum names, not numbers.
-- **Sources:** camera position from the Rhino named view, sun position from the Rhino sun, the rest
-  from the sheet and the request.
+- **Sources:** camera, projection and lens from the Rhino named view (the sheet's for `None`), sun
+  position from the Rhino sun, the rest from the sheet and the request.
 - **User-wide group:** Rendering (raytracing, DLSS, denoisers) lives in the user's Enscape profile
   and is read when the renderer host starts. A running host keeps its old values, even through
-  `start_hidden()`: to change them, restart only the bound `Enscape.RendererHost`.
-- **Restore:** `enscape.restore_settings()` restores the document presets and the profile. The
-  profile backup is in `%LOCALAPPDATA%\bc-enscape\` and survives a Rhino restart; while it exists,
-  `check_version()` reports `pending_profile_restore` true. It raises one error naming every
-  restore whose readback differs.
+  `start_hidden()`: after changing them, poll `enscape.restart_renderer_host()` until `complete`.
+  It restarts only this Rhino's renderer.
+- **Restore:** `restore_job()` puts back the document presets and the profile. The profile backup
+  is in `%LOCALAPPDATA%\bc-enscape\` and survives a Rhino restart; while it exists,
+  `check_version()` reports `pending_profile_restore` true and `enscape.restore_settings()` clears it.
 
 ## Materials
 List, create and edit Enscape materials, then call `enscape.refresh_materials()` before capturing:
@@ -82,14 +86,13 @@ from a recipe JSON, on the host: [image-overlay.md](references/image-overlay.md)
 | Symptom | Action |
 |---|---|
 | Start, preparation or capture not done after 120 s, or an error | Stop polling; read `enscape.status()` and the host's Enscape logs. Never resubmit blindly. |
-| Startup stalls on a cached GPU-query timeout | Restart only that idle renderer host. Never end Rhino or another session's host. |
+| Startup stalls on a cached GPU-query timeout | Poll `enscape.restart_renderer_host()`. Never end Rhino or another session's host. |
 | A window flashes at startup | Expected; the script hides it within 100 ms. |
 | Every Rook call hangs | A dialog is open in Rhino; ask the user to close it. |
 | `apply_defaults` names a sheet line or a missing key | The sheet was edited wrongly: report the line; render nothing until it is fixed. |
-| `restore_settings` refuses the profile backup | The profile changed outside the job; the backup is kept. Tell the user; never overwrite their change. |
-| Raytracing, DLSS or denoiser change has no effect | These are read at renderer start: restart only the bound renderer host. |
+| `restore_job` refuses the profile backup | The profile changed outside the job; the backup is kept. Tell the user; never overwrite their change. |
+| Raytracing, DLSS or denoiser change has no effect | These are read at renderer start: poll `enscape.restart_renderer_host()`. |
 | `capture_views` names a `failed_view` | Read `enscape.status()`; earlier images are kept. Fix it, then run a new list starting at that view. |
-| A section shows no cut | The clipping planes are not saved with that named view. |
+| A section shows no cut | No clipping plane is linked to that view and turned on. |
 | A material change does not show | Call `enscape.refresh_materials()` before capturing. |
 | Overlay alignment fails | Match the Rhino and Enscape cameras; never loosen the check. |
-| Annotations show in the Rhino mask | Make a non-annotation layer current before hiding annotations. |

@@ -32,7 +32,9 @@ It writes `composite.png`, `layers.psd` (each layer with its mode and opacity) a
 - **Different sources:** `align` fits a layer to the base by uniform scale and translation only,
   from the silhouettes (`base_mask`, a layer's `mask`, else alpha). It needs 99% overlap of the
   outer silhouettes; enclosed openings such as glazing are left out of the check.
-- **Rhino mask:** RGBA, geometry only, annotations hidden, restored afterwards.
+- **Rhino base and mask:** `enscape.capture_rhino_overlay(view, width_px, height_px, folder)` in
+  Rhino (`None` for the current viewport) writes `rhino-base.png` and `rhino-mask.png`, geometry
+  only, and restores Rhino. Render the same view at the same size so the cameras match.
 - **White-mode shading on Rhino:** render with `enscape.lighting_overrides(width_px, height_px)`
-  (orthographic, white, transparent, the screenshot's size), then use `grayscale` and
-  `normalize_white` on a Multiply layer. It only darkens; it is not a true shadow pass.
+  (white, transparent, the screenshot's size), then use `grayscale` and `normalize_white` on a
+  Multiply layer. It only darkens; it is not a true shadow pass.
