@@ -15,4 +15,7 @@
   profile backup is in `%LOCALAPPDATA%\bc-enscape\` and survives a Rhino restart; while it exists,
   `check_version()` reports `pending_profile_restore` true. It raises one error naming every
   restore whose readback differs.
+- **Refusals:** `apply_defaults` naming a sheet line or a missing key means the sheet was edited
+  wrongly: report the line and render nothing until it is fixed. `restore_settings` refusing the
+  profile backup means the profile changed outside the job: the backup is kept; tell the user.
 - **Untested:** video and panorama settings are in the sheet but untested.
