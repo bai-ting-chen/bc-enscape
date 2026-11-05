@@ -139,6 +139,6 @@ def main(folder, opacity):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("folder", type=Path)
-    parser.add_argument("--opacity", type=float, default=0.60)
+    parser.add_argument("--opacity", type=float, required=True)
     args = parser.parse_args()
     main(args.folder, args.opacity)
