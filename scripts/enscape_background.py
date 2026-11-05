@@ -86,6 +86,15 @@ from enscape_capture import (
     collect_capture,
 )
 from enscape_views import capture_views
+from enscape_materials import (
+    materials_schema,
+    list_materials,
+    read_material,
+    validate_material,
+    create_material,
+    edit_material,
+    refresh_materials,
+)
 from enscape_version_test import (
     VERSION_TEST_KEY,
     _probe_value,

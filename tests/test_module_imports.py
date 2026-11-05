@@ -16,6 +16,7 @@ prepare_capture profile_bytes profile_path re request_capture resolved_settings
 restore_general restore_preset restore_settings sc screenshot_files service_provider
 services set_preset_data settings_schema shutil start_hidden status stop_monitor
 subprocess time typed_array validate_settings version_test write_profile
+materials_schema list_materials read_material validate_material create_material edit_material refresh_materials
 """.split()
 
 
