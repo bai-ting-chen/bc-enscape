@@ -12,7 +12,9 @@ SOURCE = Path(__file__).resolve().parents[1]/"scripts"/"enscape_background.py"
 ROOT = Path(tempfile.gettempdir())
 
 def functions(*names):
-    tree = ast.parse(SOURCE.read_text())
+    tree = ast.Module(body=[node
+        for path in sorted(SOURCE.parent.glob("enscape_*.py"))
+        for node in ast.parse(path.read_text()).body], type_ignores=[])
     selected = ast.Module(body=[n for n in tree.body
         if (isinstance(n, ast.FunctionDef) and n.name in names)
         or (isinstance(n, ast.Assign) and any(isinstance(target, ast.Name) and target.id in names
