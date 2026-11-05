@@ -41,6 +41,10 @@ read the material first with `read_material`, delete what was created, write bac
 edited. Save the model only when the user asks.
 
 ## Limits
-- Tested visibly: creating a `Default` material, assigning it, changing colour and roughness.
-  Other types and texture rendering are validated but not yet seen in a render.
+- Seen working in renders: all eight types, and albedo, bump, roughness and transparency-mask
+  textures with Box mapping, size and rotation. Normal and displacement modes are not yet tested.
+- Making a type visible: Grass and Carpet need `height` (with some `variation`); Water needs wave
+  height and wind; Foliage needs a transparency mask texture; Glass needs low opacity.
+- `SelfIlluminated` in daylight on a white sky looks washed out rather than glowing; judge emission
+  at dusk or against a dark background. `Clearcoat` shows little against white surroundings.
 - An older (version-4) material keeps its type slot: switching it to `Glass` needs a new material.
