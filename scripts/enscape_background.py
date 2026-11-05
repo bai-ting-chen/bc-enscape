@@ -240,6 +240,7 @@ def settings_schema():
                 "min": lower if lower is not None else "unknown",
                 "max": upper if upper is not None else "unknown"},
                 "writable": key != "ScreenshotDefaultExtension",
+                "nullable": entry["type"] == "String" and entry["default"] is None,
                 "source": profile_path() if group == "general" else "VisualSettingsManager.GetActivePresetSettings (document snapshot + profile fallback)"})
             if entry["enum"]:
                 for field in ("value", "default"):
@@ -281,7 +282,7 @@ def validate_settings(settings, general=False):
             if type(value) is not bool:
                 raise ValueError(key + " requires bool")
         elif entry["type"] == "String":
-            if not isinstance(value, str):
+            if not isinstance(value, str) and not (value is None and entry.get("nullable")):
                 raise ValueError(key + " requires string")
         else:
             integer = entry["type"] in ("Int32", "UInt32")

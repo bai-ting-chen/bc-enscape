@@ -29,12 +29,15 @@ class Validation(unittest.TestCase):
             dict(key="Flags", type="Categories", enum={"Vegetation":1,"People":2}, flags=True, writable=True, range={}),
             dict(key="Format", type="String", enum={}, writable=False, range={}),
             dict(key="Bool", type="Boolean", enum={}, writable=True, range={}),
+            dict(key="NullablePath",type="String",enum={},writable=True,range={},nullable=True),
         ]
         self.scope["settings_schema"] = lambda: {"categories":{"output":entries,"general":[]}}
     def test_invalid_values(self):
         for values in ({"Size":499}, {"Size":8193}, {"Size":True}, {"Mode":1}, {"Mode":"BAD"}, {"Bool":1}, {"Format":"png"}, {"missing":1}, {"UnknownFloat":float("nan")}):
             with self.subTest(values=values), self.assertRaises(ValueError):
                 self.scope["validate_settings"](values)
+    def test_nullable_factory_default(self):
+        self.assertEqual(self.scope["validate_settings"]({"NullablePath":None}), {"NullablePath":None})
     def test_flag_names_combine_without_accepting_integers(self):
         self.assertEqual(self.scope["validate_settings"]({"Flags":"Vegetation, People"}), {"Flags":3})
         with self.assertRaises(ValueError):
