@@ -72,7 +72,9 @@ or a loop. Limits and failures are in [Troubleshooting](#troubleshooting).
    import enscape_background as enscape
    ```
 
-   Run `enscape.check_version()` ([Enscape versions](#enscape-versions)). Restore the named view in
+   Run `enscape.check_version()` ([Enscape versions](#enscape-versions)). If it reports
+   `pending_profile_restore` true, an earlier job ended before restoring: call
+   `enscape.restore_settings()` first. Restore the named view in
    the main viewport, not a floating one. Call `enscape.apply_defaults(overrides)` with the
    request's changes as `{key: value}` (enum names, not numbers), or `{}`. For an overlay, pass
    `enscape.lighting_overrides(width_px, height_px)`: orthographic, white mode, transparent, that
@@ -89,8 +91,9 @@ or a loop. Limits and failures are in [Troubleshooting](#troubleshooting).
    Check: `enscape.collect_capture()` returns every file the capture wrote and their pixel size.
    With `ExportBackgroundMask` on, that is the PNG plus `_alphaMask`, `_depth`, `_materialId` and
    `_objectId` PNGs.
-6. **Check and restore.** Open the image. Restore camera and sun. Call `enscape.restore_settings()`;
-   it raises if the readback of the presets or the profile differs. If this job started the
+6. **Check and restore.** Open the image. Restore camera and sun. Call `enscape.restore_settings()`.
+   It restores the presets and the profile, the profile from a backup in `%LOCALAPPDATA%\bc-enscape\`
+   that survives a Rhino restart. It raises one error naming every restore whose readback differs. If this job started the
    renderer, close only that renderer's window, then call `enscape.stop_monitor()`. Outputs stay in
    the project, never in this skill.
 
@@ -134,6 +137,8 @@ and is not a true light or shadow pass. Photoshop is not needed.
 | Start, preparation or capture not done after 120 s, or an error | Stop polling; read `enscape.status()` and the host's Enscape logs. Never resubmit blindly. |
 | Startup stalls on a cached GPU-query timeout | Read the selected host's logs; restarting only that idle renderer host has recovered it. Never end Rhino or another session's host. |
 | A window flashes at startup | Expected; the script hides it within 100 ms. |
+| `restore_settings` refuses the profile backup | The profile changed outside the job since the backup; the backup is kept. Tell the user; never overwrite their change. |
+| `apply_defaults` names a sheet line or a missing key | The sheet was edited wrongly: report the line; render nothing until it is fixed. |
 | Internal export error at capture | The view reference is missing: run `prepare_capture` before `request_capture`. |
 | `prepare_capture` refuses clipping planes | The helper handles unclipped views only; a clipped view needs its own capture context. |
 | Annotations show in `rhino-mask.png` | Rhino keeps the current layer visible: make a non-annotation layer current before hiding. |
