@@ -54,7 +54,7 @@ done after 120 s: read `enscape.status()` and the Enscape logs; never resubmit b
    started the renderer, close only its window, then `enscape.stop_monitor()`.
 
 ## Settings
-Every render starts from the user's sheet [render-defaults.md](render-defaults.md); a value named
+Every render starts from the user's sheet [view-setting-defaults.md](references/view-setting-defaults.md); a value named
 in the request overrides it for that render only. Details, the schema and restore:
 [settings.md](references/settings.md).
 

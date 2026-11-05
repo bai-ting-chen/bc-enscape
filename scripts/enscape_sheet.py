@@ -1,4 +1,4 @@
-"""Read the user render-defaults sheet."""
+"""Read the user's view-setting defaults sheet."""
 import json
 import os
 
@@ -17,7 +17,7 @@ def _read_defaults():
     """Read Value cells only; enum words such as None remain strings."""
     values = {}
     in_table = False
-    with open(_skill_file("render-defaults.md"), encoding="utf-8-sig") as stream:
+    with open(_skill_file("references/view-setting-defaults.md"), encoding="utf-8-sig") as stream:
         for line_number, line in enumerate(stream, 1):
             if not line.lstrip().startswith("|"):
                 if in_table and line.strip():

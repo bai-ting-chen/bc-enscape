@@ -1,6 +1,6 @@
 # Render defaults
 
-The user's default Enscape settings; how renders use them is in [settings.md](references/settings.md).
+The user's default Enscape settings; how renders use them is in [settings.md](settings.md).
 Edit any **Value**; keep the key names. The **Allowed** column is from Enscape 4.22's schema
 (`enscape.settings_schema()` is the authority); the version test checks every value against it.
 
@@ -138,7 +138,7 @@ call, so Enscape's own screenshot folder settings are not in this sheet.
 | RecordFramesPerSecond | 30 | frames per second |
 
 ## Rendering (general, user-wide)
-Stored in the user's Enscape profile, not the model ([settings.md](references/settings.md)).
+Stored in the user's Enscape profile, not the model ([settings.md](settings.md)).
 
 | Key | Value | Allowed |
 |---|---|---|

@@ -1,6 +1,6 @@
 # Settings
 
-- **Sheet:** [render-defaults.md](../render-defaults.md) is the user's sheet. Every render starts
+- **Sheet:** [view-setting-defaults.md](view-setting-defaults.md) is the user's sheet. Every render starts
   from it. A value the user names overrides that setting for that render only. Change the sheet
   only when the user asks.
 - **Schema:** `enscape.settings_schema()` lists every setting of the installed Enscape: key, type,
