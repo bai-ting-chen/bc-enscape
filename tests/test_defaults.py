@@ -1,0 +1,64 @@
+"""Sheet parsing, version reporting and reversible application checks."""
+import io
+import json
+import os
+import re
+import unittest
+from types import SimpleNamespace
+from unittest.mock import Mock, mock_open
+from test_settings import SOURCE, functions
+
+class Version(unittest.TestCase):
+    def test_mismatch_returns_values_without_raising(self):
+        scope=functions("check_version")
+        scope.update(re=re,_installed_version=lambda:"1.2.3.4",_skill_file=lambda name:name,
+                     open=mock_open(read_data="Tested with Enscape 9.8.7.6.\n"))
+        self.assertEqual(scope["check_version"](),dict(installed="1.2.3.4",tested="9.8.7.6",match=False))
+    def test_match_reads_the_document(self):
+        scope=functions("check_version")
+        scope.update(re=re,_installed_version=lambda:"1.2.3.4",_skill_file=lambda name:name,
+                     open=mock_open(read_data="Tested with Enscape 1.2.3.4.\n"))
+        self.assertTrue(scope["check_version"]()["match"])
+
+class Sheet(unittest.TestCase):
+    def scope(self,text):
+        scope=functions("_read_defaults")
+        scope.update(json=json,_skill_file=lambda name:name,open=mock_open(read_data=text))
+        return scope
+    def test_types_and_allowed_column_are_independent(self):
+        scope=self.scope('| Key | Value | Allowed |\n|---|---|---|\n| Enum | None | ignored |\n| Empty | "" | ignored |\n| Flag | false | ignored |\n| Number | 12.5 | ignored |\n')
+        self.assertEqual(scope["_read_defaults"](),dict(Enum="None",Empty="",Flag=False,Number=12.5))
+    def test_duplicate_names_are_rejected(self):
+        scope=self.scope('| Key | Value | Allowed |\n|---|---|---|\n| Size | 1000 | ignored |\n| Size | 1500 | ignored |\n')
+        with self.assertRaisesRegex(ValueError,"Size"):scope["_read_defaults"]()
+
+class Application(unittest.TestCase):
+    def setUp(self):
+        self.scope=functions("apply_defaults","_split_settings","validate_settings")
+        entries=[dict(key="SunPower",type="Single",enum={},writable=True,range=dict(min=0,max=500))]
+        general=[dict(key="UseDlss",type="Boolean",enum={},writable=True,range={})]
+        import math
+        self.scope.update(math=math,settings_schema=lambda:{"categories":{"illumination":entries,"general":general}},
+            _read_defaults=lambda:{"SunPower":80,"UseDlss":True},
+            sc=SimpleNamespace(sticky={}),PRESET_KEY="preset",GENERAL_KEY="general",
+            configure_preset=Mock(),configure_general=Mock(),restore_settings=Mock())
+    def test_invalid_merge_writes_nothing(self):
+        with self.assertRaisesRegex(ValueError,"SunPower"):self.scope["apply_defaults"]({"SunPower":501})
+        self.scope["configure_general"].assert_not_called()
+        self.scope["configure_preset"].assert_not_called()
+    def test_override_and_visual_failure_restore(self):
+        self.scope["configure_preset"].side_effect=OSError("write failed")
+        with self.assertRaises(OSError):self.scope["apply_defaults"]({"SunPower":200})
+        self.scope["configure_general"].assert_called_once_with({"UseDlss":True})
+        self.scope["restore_settings"].assert_called_once()
+    def test_return_is_the_sheet_plus_overrides(self):
+        self.assertEqual(self.scope["apply_defaults"]({"SunPower":200}),{"SunPower":200,"UseDlss":True})
+    def test_restore_order(self):
+        scope=functions("restore_settings")
+        order=[]
+        scope.update(sc=SimpleNamespace(sticky={"preset":{},"general":{}}),PRESET_KEY="preset",GENERAL_KEY="general",
+            restore_preset=lambda:order.append("preset"),restore_general=lambda:order.append("general"))
+        scope["restore_settings"]()
+        self.assertEqual(order,["preset","general"])
+
+if __name__=="__main__":unittest.main()

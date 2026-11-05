@@ -1,4 +1,4 @@
-"""Experimental Enscape 4.22 bridge hooks, called inside Rhino through Rook.
+"""Experimental Enscape bridge hooks, called inside Rhino through Rook.
 
 These are installed plug-in internals, not the public Chaos SDK. Start/capture
 are asynchronous: return to Rhino's event loop, then call collect_capture().
@@ -8,6 +8,7 @@ import base64
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -20,8 +21,110 @@ import scriptcontext as sc
 KEY = "bc_enscape_background"
 PRESET_KEY = "bc_enscape_temporary_preset"
 GENERAL_KEY = "bc_enscape_temporary_general"
+VERSION_TEST_KEY = "bc_enscape_version_test"
 ACTIVE_PRESET_ID = "d8e4b713-533b-421b-8b11-a961385e4b37"
 FLAGS = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance
+
+
+def _skill_file(name):
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), name)
+
+
+def _installed_version():
+    return str(find_type("Enscape.Rhino.Plugin.EnscapeRhinoPlugin").Assembly.GetName().Version)
+
+
+def check_version():
+    """Report the installed and documented versions; a mismatch is not an error."""
+    with open(_skill_file("SKILL.md"), encoding="utf-8-sig") as stream:
+        matches = re.findall(r"^Tested with Enscape (\d+(?:\.\d+){1,3})\.\s*$", stream.read(), re.MULTILINE)
+    tested = matches[0] if len(matches) == 1 else None
+    installed = _installed_version()
+    return {"installed": installed, "tested": tested, "match": installed == tested}
+
+
+def _read_defaults():
+    """Read Value cells only; enum words such as None remain strings."""
+    values = {}
+    in_table = False
+    with open(_skill_file("render-defaults.md"), encoding="utf-8-sig") as stream:
+        for line in stream:
+            if not line.lstrip().startswith("|"):
+                in_table = False
+                continue
+            cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+            if cells[:3] == ["Key", "Value", "Allowed"]:
+                in_table = True
+                continue
+            if not in_table or all(set(cell) <= set("-: ") for cell in cells):
+                continue
+            key = cells[0]
+            if len(cells) < 3 or not key or key in values:
+                raise ValueError("Invalid or duplicate sheet row: " + key)
+            try:
+                values[key] = json.loads(cells[1])
+            except ValueError:
+                values[key] = cells[1]
+    if not values:
+        raise ValueError("The render sheet contains no setting rows")
+    return values
+
+
+def _split_settings(settings):
+    schema = settings_schema()["categories"]
+    general_keys = {entry["key"] for entry in schema["general"]}
+    known_keys = {entry["key"] for entries in schema.values() for entry in entries}
+    for key in settings:
+        if key not in known_keys:
+            raise ValueError("Unknown sheet or override key: " + str(key))
+    visual = {key: value for key, value in settings.items() if key not in general_keys}
+    general = {key: value for key, value in settings.items() if key in general_keys}
+    # Validate both groups before either write path can run.
+    if visual:
+        validate_settings(visual)
+    if general:
+        validate_settings(general, general=True)
+    return visual, general
+
+
+def apply_defaults(overrides):
+    """Apply the user's sheet plus explicit request values, retaining backups."""
+    if not isinstance(overrides, dict):
+        raise ValueError("Overrides must be a dict")
+    if PRESET_KEY in sc.sticky or GENERAL_KEY in sc.sticky:
+        raise ValueError("Restore existing temporary settings before applying defaults")
+    values = _read_defaults()
+    values.update(overrides)
+    visual, general = _split_settings(values)
+    try:
+        # The preset records the modified profile as its own restoration baseline.
+        if general:
+            configure_general(general)
+        if visual:
+            configure_preset(visual)
+    except Exception:
+        restore_settings()
+        raise
+    return values
+
+
+def lighting_overrides(width_px, height_px):
+    """Return overlay settings to merge with the sheet via apply_defaults."""
+    return {"RenderingStyle": "WHITE", "ProjectionMode": "ORTHOGRAPHIC",
+            "ScreenshotResolution": "CUSTOM", "ScreenshotResolutionX": width_px,
+            "ScreenshotResolutionY": height_px, "ScreenshotViewportAspectRatio": False,
+            "ApplyAlphaChannelDuringImageExport": True, "ExportBackgroundMask": False,
+            "WhiteBackground": True}
+
+
+def restore_settings():
+    """Restore whichever paths were changed, in reverse application order."""
+    result = {}
+    if PRESET_KEY in sc.sticky:
+        result["preset"] = restore_preset()
+    if GENERAL_KEY in sc.sticky:
+        result["general"] = restore_general()
+    return result
 
 # The host uses .NET 9; Rhino's plug-in uses .NET Framework. Reflect in a separate
 # PowerShell process, replaying the bound document snapshot through Enscape's own
@@ -44,7 +147,7 @@ function SettingType($name) {
         $type = $assembly.GetType("Enscape.EnscapeSettings." + $name)
         if ($type) { return $type }
     }
-    throw "Enscape 4.22 setting type missing: $name"
+    throw "Installed Enscape setting type missing: $name"
 }
 Add-Type -TypeDefinition @"
 using System;
@@ -187,9 +290,6 @@ def write_profile(data):
 
 
 def resolved_settings():
-    version = find_type("Enscape.Rhino.Plugin.EnscapeRhinoPlugin").Assembly.GetName().Version
-    if str(version) != "4.22.0.1361":
-        raise ValueError("Unverified Enscape version: " + str(version) + "; verified: 4.22.0.1361")
     store, document = embedded_presets()
     presets, active_ids = {}, set()
     for item in store.GetAllStoredData(document):
@@ -255,7 +355,7 @@ def settings_schema():
             if group == "general":
                 entry["note"] = "User-wide profile value; existing renderer hosts require a restart to load changes"
             categories[category].append(entry)
-    return {"categories": categories, "external": {
+    return {"version": check_version(), "categories": categories, "external": {
         "sun": "Rhino document sun; prepare_capture uses RhinoSunParser.ParseSun",
         "camera": "Rhino named view; prepare_capture sends its camera"}}
 
@@ -393,15 +493,6 @@ def configure_preset(settings):
         restore_preset()
         raise
     return {"changed": settings, "preset_id": str(preset_id), "stored_readback": True}
-
-
-def configure_lighting(width, height):
-    """Select white orthographic lighting; caller supplies both pixel dimensions."""
-    return configure_preset({"RenderingStyle": "WHITE", "ProjectionMode": "ORTHOGRAPHIC",
-        "ScreenshotResolution": "CUSTOM", "ScreenshotResolutionX": width,
-        "ScreenshotResolutionY": height, "ScreenshotViewportAspectRatio": False,
-        "ApplyAlphaChannelDuringImageExport": True, "ExportBackgroundMask": False,
-        "WhiteBackground": True})
 
 
 def configure_general(settings):
