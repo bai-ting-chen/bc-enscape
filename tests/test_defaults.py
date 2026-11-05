@@ -78,4 +78,28 @@ class VersionProbe(unittest.TestCase):
         self.assertEqual(state["phase"], "capturing")
         scope["restore_settings"].assert_not_called()
 
+    def test_category_readback_failure_restores_and_names_the_failed_key(self):
+        scope = functions("_version_category", "_probe_value")
+        entries = [dict(key="UseDlss",type="Boolean",enum={},value=True,writable=True)]
+        scope.update(settings_schema=lambda:{"categories":{"general":entries}},
+                     _read_defaults=lambda:{"UseDlss":True},configure_general=Mock(),restore_settings=Mock())
+        state = dict(items={})
+        with self.assertRaisesRegex(ValueError,"UseDlss"):
+            scope["_version_category"](state,"general")
+        scope["restore_settings"].assert_called_once()
+        self.assertFalse(state["items"]["general"]["passed"])
+
+    def test_general_probe_prefers_render_sheet_keys(self):
+        scope = functions("_version_category", "_probe_value")
+        entries = [dict(key=key,type="Boolean",enum={},value=True,writable=True)
+                   for key in ("CustomWindowCaptionEnabled","UseDlss")]
+        def configure(changes):
+            for entry in entries:
+                if entry["key"] in changes: entry["value"] = changes[entry["key"]]
+        scope.update(settings_schema=lambda:{"categories":{"general":entries}},
+                     _read_defaults=lambda:{"UseDlss":True},configure_general=configure,restore_settings=Mock())
+        state = dict(items={})
+        scope["_version_category"](state,"general")
+        self.assertEqual(state["items"]["general"]["key"], "UseDlss")
+
 if __name__=="__main__":unittest.main()

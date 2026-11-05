@@ -142,10 +142,14 @@ def _probe_value(entry):
 
 def _version_category(state, category):
     entries = settings_schema()["categories"][category]
-    candidates = sorted(entries, key=lambda entry: (entry["type"] != "Boolean", not bool(entry["enum"])))
-    entry, value = next(((entry, _probe_value(entry)) for entry in candidates
-                         if entry["writable"] and _probe_value(entry) is not None), (None, None))
-    if entry is None:
+    sheet = _read_defaults()
+    candidates = sorted(entries, key=lambda entry: (
+        entry["key"] not in sheet, entry["type"] != "Boolean", not bool(entry["enum"])))
+    for entry in candidates:
+        value = _probe_value(entry) if entry["writable"] else None
+        if value is not None:
+            break
+    else:
         raise ValueError("No writable test value discovered for " + category)
     key = entry["key"]
     try:
@@ -154,6 +158,9 @@ def _version_category(state, category):
         actual = next(item["value"] for item in settings_schema()["categories"][category] if item["key"] == key)
         if actual != value:
             raise ValueError(key + " failed resolved readback")
+    except Exception as error:
+        state["items"][category] = {"passed": False, "key": key, "error": str(error)}
+        raise
     finally:
         restore_settings()
     state["items"][category] = {"passed": True, "key": key, "value": value, "restored": True}
@@ -162,8 +169,11 @@ def _version_category(state, category):
 def _version_snapshot_matches(state):
     store, document = embedded_presets()
     current = [(item.Identifier, item.Data) for item in store.GetAllStoredData(document)]
-    before = state["presets"]
-    return profile_bytes() == state["profile"] and len(current) == len(before) and all(
+    return profile_bytes() == state["profile"] and _preset_records_match(current, state["presets"])
+
+
+def _preset_records_match(current, before):
+    return len(current) == len(before) and all(
         any(key.Equals(old) and value == data for old, data in before) for key, value in current)
 
 
@@ -680,7 +690,7 @@ def restore_preset():
     if before:
         set_preset_data(state["store"], state["document"], before)
     current = [(item.Identifier, item.Data) for item in state["store"].GetAllStoredData(state["document"])]
-    if len(current) != len(before) or any(not any(key.Equals(old) and value == data for old, data in before) for key, value in current):
+    if not _preset_records_match(current, before):
         raise ValueError("Preset restoration failed readback")
     if profile_bytes() != state["profile_before"]:
         raise ValueError("User profile differs after preset restoration")
