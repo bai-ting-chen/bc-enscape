@@ -16,7 +16,7 @@ Claude Code share this folder.
 
 Needs Windows, a visible Rhino main window, a licensed Enscape and a GPU. The Enscape window is
 hidden, not headless. The hooks are private Enscape plug-in internals, not the Chaos SDK, tested with
-Enscape 4.5.0.485: recheck them after an Enscape upgrade.
+Enscape 4.22.0.1361: recheck them after an Enscape upgrade.
 
 ## Inputs from the request
 Every value below comes from the user's request or the project; this skill fixes none of them.
