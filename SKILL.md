@@ -20,8 +20,7 @@ sun azimuth and altitude in degrees, an output folder in the project. Save the R
 when asked: during a job it holds a changed sun, view and temporary Enscape presets.
 
 Enscape's tasks only progress while Rhino's event loop runs, between Rook calls: start a task in
-one call and poll it in later calls. A `.Wait()` or a loop inside one call hangs Rhino. Nothing
-done after 120 s: read `enscape.status()` and the Enscape logs; never resubmit blindly.
+one call and poll it in later calls. A `.Wait()` or a loop inside one call hangs Rhino.
 
 1. **Bind** the intended Rhino (`rhino_set_active_instance`); record its camera and sun.
 2. **Load and apply settings** through `rhino_execute` (Rook resets `sys.path`, so keep the path
@@ -33,9 +32,9 @@ done after 120 s: read `enscape.status()` and the Enscape logs; never resubmit b
    enscape.check_version()
    enscape.apply_defaults({})   # or the request's {key: value}
    ```
-   `pending_profile_restore` true: call `enscape.restore_settings()` first. Installed version
-   differs from the line above: on a scratch scene (one box, one named view), run steps 3–4 and
-   `enscape.version_test(new_folder)` until `complete`; pass → update the line, fail → render nothing.
+   `pending_profile_restore` true: call `enscape.restore_settings()` first. `match` false: tell
+   the user the installed and tested versions and let them decide whether to run a check
+   (`enscape.version_test(new_folder)` after steps 3–4, called until `complete`) or render anyway.
 3. **Renderer host:** the `Enscape.RendererHost` whose `ParentProcessId` is the bound Rhino PID
    (`Get-CimInstance Win32_Process`), looked up every job.
 4. **Start:** `enscape.start_hidden(pid)`; poll `enscape.status()` for `running` true.
@@ -66,3 +65,19 @@ Enscape keeps showing the old material otherwise. Calls, types and units:
 ## Image overlay
 Stack an Enscape render, its channels and Rhino screenshots into one composite PNG and layered PSD
 from a recipe JSON, on the host: [image-overlay.md](references/image-overlay.md).
+
+## Troubleshooting
+| Symptom | Action |
+|---|---|
+| Start, preparation or capture not done after 120 s, or an error | Stop polling; read `enscape.status()` and the host's Enscape logs. Never resubmit blindly. |
+| Startup stalls on a cached GPU-query timeout | Restart only that idle renderer host. Never end Rhino or another session's host. |
+| A window flashes at startup | Expected; the script hides it within 100 ms. |
+| Every Rook call hangs | A dialog is open in Rhino; ask the user to close it. |
+| `apply_defaults` names a sheet line or a missing key | The sheet was edited wrongly: report the line; render nothing until it is fixed. |
+| `restore_settings` refuses the profile backup | The profile changed outside the job; the backup is kept. Tell the user; never overwrite their change. |
+| Raytracing, DLSS or denoiser change has no effect | These are read at renderer start: restart only the bound renderer host. |
+| `capture_views` names a `failed_view` | Read `enscape.status()`; earlier images are kept. Fix it, then run a new list starting at that view. |
+| A section shows no cut | The clipping planes are not saved with that named view. |
+| A material change does not show | Call `enscape.refresh_materials()` before capturing. |
+| Overlay alignment fails | Match the Rhino and Enscape cameras; never loosen the check. |
+| Annotations show in the Rhino mask | Make a non-annotation layer current before hiding annotations. |
