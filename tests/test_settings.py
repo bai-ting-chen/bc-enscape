@@ -13,7 +13,10 @@ ROOT = Path(tempfile.gettempdir())
 
 def functions(*names):
     tree = ast.parse(SOURCE.read_text())
-    selected = ast.Module(body=[n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in names], type_ignores=[])
+    selected = ast.Module(body=[n for n in tree.body
+        if (isinstance(n, ast.FunctionDef) and n.name in names)
+        or (isinstance(n, ast.Assign) and any(isinstance(target, ast.Name) and target.id in names
+                                             for target in n.targets))], type_ignores=[])
     scope = {}
     exec(compile(selected, str(SOURCE), "exec"), scope)
     return scope

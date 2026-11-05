@@ -23,6 +23,10 @@ PRESET_KEY = "bc_enscape_temporary_preset"
 GENERAL_KEY = "bc_enscape_temporary_general"
 VERSION_TEST_KEY = "bc_enscape_version_test"
 ACTIVE_PRESET_ID = "d8e4b713-533b-421b-8b11-a961385e4b37"
+SHEET_OMITTED_VISUAL_KEYS = frozenset({
+    "ScreenshotDefaultExtension", "ScreenshotAutoFileNameEnabled", "ScreenshotAutoFolder",
+    "ScreenshotUseSubFolder", "ScreenshotJsonExport",
+})
 FLAGS = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance
 
 
@@ -49,8 +53,10 @@ def _read_defaults():
     values = {}
     in_table = False
     with open(_skill_file("render-defaults.md"), encoding="utf-8-sig") as stream:
-        for line in stream:
+        for line_number, line in enumerate(stream, 1):
             if not line.lstrip().startswith("|"):
+                if in_table and line.strip():
+                    raise ValueError("Invalid sheet row at line {}: {}".format(line_number, line.strip()))
                 in_table = False
                 continue
             cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
@@ -69,6 +75,15 @@ def _read_defaults():
     if not values:
         raise ValueError("The render sheet contains no setting rows")
     return values
+
+
+def _check_sheet_complete(values):
+    schema = settings_schema()["categories"]
+    expected = {entry["key"] for category, entries in schema.items() if category != "general"
+                for entry in entries} - SHEET_OMITTED_VISUAL_KEYS
+    missing = expected - values.keys()
+    if missing:
+        raise ValueError("Render sheet is missing visual keys: " + ", ".join(sorted(missing)))
 
 
 def _split_settings(settings):
@@ -95,6 +110,7 @@ def apply_defaults(overrides):
     if PRESET_KEY in sc.sticky or GENERAL_KEY in sc.sticky or os.path.exists(_profile_backup_path()):
         raise ValueError("Restore existing temporary settings before applying defaults")
     values = _read_defaults()
+    _check_sheet_complete(values)
     values.update(overrides)
     visual, general = _split_settings(values)
     try:
@@ -240,6 +256,7 @@ def version_test(output_folder):
     try:
         if state["phase"] == "sheet":
             values = _read_defaults()
+            _check_sheet_complete(values)
             _split_settings(values)
             state["items"]["sheet"] = {"passed": True, "keys": len(values)}
             state["remaining"] = list(settings_schema()["categories"])

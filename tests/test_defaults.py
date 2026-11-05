@@ -31,10 +31,25 @@ class Sheet(unittest.TestCase):
     def test_duplicate_names_are_rejected(self):
         scope=self.scope('| Key | Value | Allowed |\n|---|---|---|\n| Size | 1000 | ignored |\n| Size | 1500 | ignored |\n')
         with self.assertRaisesRegex(ValueError,"Size"):scope["_read_defaults"]()
+    def test_missing_leading_pipe_names_the_line(self):
+        scope=self.scope('| Key | Value | Allowed |\n|---|---|---|\nSunPower | 80 | ignored |\n| LightBrightness | 100 | ignored |\n')
+        with self.assertRaisesRegex(ValueError,"line 3.*SunPower"):
+            scope["_read_defaults"]()
+    def test_blank_line_ends_a_table_before_prose(self):
+        scope=self.scope('| Key | Value | Allowed |\n|---|---|---|\n| SunPower | 80 | ignored |\n\nNext category.\n')
+        self.assertEqual(scope["_read_defaults"](), {"SunPower":80})
+    def test_only_documented_omissions_are_optional(self):
+        scope=functions("_check_sheet_complete","SHEET_OMITTED_VISUAL_KEYS")
+        keys=scope["SHEET_OMITTED_VISUAL_KEYS"] | {"SunPower"}
+        scope["settings_schema"]=lambda:{"categories":{"output":[{"key":key} for key in keys],
+                                                       "general":[{"key":"UseDlss"}]}}
+        scope["_check_sheet_complete"]({"SunPower":80})
+        with self.assertRaisesRegex(ValueError,"SunPower"):
+            scope["_check_sheet_complete"]({})
 
 class Application(unittest.TestCase):
     def setUp(self):
-        self.scope=functions("apply_defaults","_split_settings","validate_settings")
+        self.scope=functions("apply_defaults","_split_settings","validate_settings","_check_sheet_complete","SHEET_OMITTED_VISUAL_KEYS")
         entries=[dict(key="SunPower",type="Single",enum={},writable=True,range=dict(min=0,max=500))]
         general=[dict(key="UseDlss",type="Boolean",enum={},writable=True,range={})]
         import math
@@ -45,6 +60,19 @@ class Application(unittest.TestCase):
             configure_preset=Mock(),configure_general=Mock(),restore_settings=Mock())
     def test_invalid_merge_writes_nothing(self):
         with self.assertRaisesRegex(ValueError,"SunPower"):self.scope["apply_defaults"]({"SunPower":501})
+        self.scope["configure_general"].assert_not_called()
+        self.scope["configure_preset"].assert_not_called()
+    def test_corrupted_sun_row_prevents_both_writes(self):
+        text='| Key | Value | Allowed |\n|---|---|---|\nSunPower | 80 | ignored |\n| LightBrightness | 100 | ignored |\n\n| Key | Value | Allowed |\n|---|---|---|\n| UseDlss | true | ignored |\n'
+        self.scope["_read_defaults"]=Sheet().scope(text)["_read_defaults"]
+        with self.assertRaisesRegex(ValueError,"SunPower"):
+            self.scope["apply_defaults"]({})
+        self.scope["configure_general"].assert_not_called()
+        self.scope["configure_preset"].assert_not_called()
+    def test_missing_visual_sheet_key_cannot_be_supplied_by_override(self):
+        self.scope["_read_defaults"]=lambda:{"UseDlss":True}
+        with self.assertRaisesRegex(ValueError,"missing.*SunPower"):
+            self.scope["apply_defaults"]({"SunPower":200})
         self.scope["configure_general"].assert_not_called()
         self.scope["configure_preset"].assert_not_called()
     def test_override_and_visual_failure_restore(self):
