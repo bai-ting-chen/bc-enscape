@@ -1,12 +1,10 @@
 """Sheet parsing, version reporting and reversible application checks."""
-import io
 import json
-import os
 import re
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, mock_open
-from test_settings import SOURCE, functions
+from test_settings import functions
 
 class Version(unittest.TestCase):
     def test_mismatch_returns_values_without_raising(self):
@@ -60,5 +58,24 @@ class Application(unittest.TestCase):
             restore_preset=lambda:order.append("preset"),restore_general=lambda:order.append("general"))
         scope["restore_settings"]()
         self.assertEqual(order,["preset","general"])
+
+class VersionProbe(unittest.TestCase):
+    def test_probe_changes_an_enum_or_boolean(self):
+        scope = functions("_probe_value")
+        self.assertEqual(scope["_probe_value"](dict(enum={"HIGH":2,"DRAFT":0},value="HIGH")), "DRAFT")
+        self.assertFalse(scope["_probe_value"](dict(enum={},type="Boolean",value=True)))
+
+    def test_numeric_probe_respects_known_bounds_and_skips_unknown(self):
+        scope = functions("_probe_value")
+        self.assertEqual(scope["_probe_value"](dict(enum={},type="Single",value=100,range=dict(min=0,max=100))), 0)
+        self.assertIsNone(scope["_probe_value"](dict(enum={},type="Single",value=5,range=dict(min="unknown",max="unknown"))))
+
+    def test_capture_wait_does_not_submit_twice(self):
+        scope = functions("_version_capture")
+        state = dict(phase="capturing",items={})
+        scope.update(collect_capture=lambda:{"capture_task":"WaitingForActivation"},restore_settings=Mock())
+        scope["_version_capture"](state)
+        self.assertEqual(state["phase"], "capturing")
+        scope["restore_settings"].assert_not_called()
 
 if __name__=="__main__":unittest.main()
