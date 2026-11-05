@@ -61,6 +61,21 @@ class Application(unittest.TestCase):
             restore_preset=lambda:order.append("preset"),restore_general=lambda:order.append("general"))
         scope["restore_settings"]()
         self.assertEqual(order,["preset","general"])
+    def test_preset_restore_failure_still_attempts_general(self):
+        scope=functions("restore_settings")
+        general=Mock()
+        scope.update(sc=SimpleNamespace(sticky={"preset":{},"general":{}}),PRESET_KEY="preset",GENERAL_KEY="general",
+                     restore_preset=Mock(side_effect=ValueError("document closed")),restore_general=general)
+        with self.assertRaisesRegex(Exception,"preset.*document closed"):
+            scope["restore_settings"]()
+        general.assert_called_once()
+    def test_both_restore_failures_are_reported(self):
+        scope=functions("restore_settings")
+        scope.update(sc=SimpleNamespace(sticky={"preset":{},"general":{}}),PRESET_KEY="preset",GENERAL_KEY="general",
+                     restore_preset=Mock(side_effect=ValueError("document closed")),
+                     restore_general=Mock(side_effect=OSError("profile locked")))
+        with self.assertRaisesRegex(Exception,"preset.*document closed.*general.*profile locked"):
+            scope["restore_settings"]()
 
 class VersionProbe(unittest.TestCase):
     def test_probe_changes_an_enum_or_boolean(self):

@@ -29,6 +29,7 @@ class ProfileRecovery(unittest.TestCase):
             System=SimpleNamespace(Guid=SimpleNamespace(NewGuid=lambda:"test")),
             sc=SimpleNamespace(sticky=self.sticky), GENERAL_KEY="general", PRESET_KEY="preset",
             validate_settings=lambda values, **kwargs:values,
+            restore_preset=Mock(side_effect=AssertionError("No preset backup in this test")),
             profile_path=lambda:str(self.profile), _profile_backup_path=lambda:str(self.backup),
             _skill_file=lambda name:str(SOURCE.parents[1] / name), _installed_version=lambda:"1.2.3.4")
 
@@ -65,7 +66,7 @@ class ProfileRecovery(unittest.TestCase):
         self.scope["configure_general"]({"UseDlss":False})
         self.sticky.clear()
         self.profile.write_bytes(b"external change")
-        with self.assertRaisesRegex(ValueError, "externally"):
+        with self.assertRaisesRegex(RuntimeError, "general.*externally"):
             self.scope["restore_settings"]()
         self.assertEqual(self.profile.read_bytes(), b"external change")
         self.assertTrue(self.backup.exists())
@@ -77,6 +78,24 @@ class ProfileRecovery(unittest.TestCase):
         self.assertTrue(self.scope["check_version"]().get("pending_profile_restore", False))
         self.scope["restore_settings"]()
         self.assertFalse(self.scope["check_version"]()["pending_profile_restore"])
+
+    def test_failed_preset_restore_can_be_retried_after_profile_recovery(self):
+        self.scope["configure_general"]({"UseDlss":False})
+        self.sticky["preset"] = {"profile_before":self.profile.read_bytes()}
+        calls = []
+        def restore_preset():
+            calls.append(True)
+            if len(calls) == 1:
+                raise ValueError("transient document failure")
+            self.assertEqual(self.profile.read_bytes(), self.sticky["preset"]["profile_before"])
+            del self.sticky["preset"]
+        self.scope["restore_preset"] = restore_preset
+        with self.assertRaisesRegex(RuntimeError, "preset.*transient document failure"):
+            self.scope["restore_settings"]()
+        self.assertEqual(self.profile.read_bytes(), self.before)
+        self.assertFalse(self.backup.exists())
+        self.scope["restore_settings"]()
+        self.assertEqual(self.sticky, {})
 
 
 if __name__ == "__main__":

@@ -119,12 +119,18 @@ def lighting_overrides(width_px, height_px):
 
 
 def restore_settings():
-    """Restore whichever paths were changed, in reverse application order."""
+    """Attempt both restoration paths, then report every failure together."""
     result = {}
-    if PRESET_KEY in sc.sticky:
-        result["preset"] = restore_preset()
-    if GENERAL_KEY in sc.sticky or os.path.exists(_profile_backup_path()):
-        result["general"] = restore_general()
+    failures = []
+    for name, key, restore in (("preset", PRESET_KEY, restore_preset),
+                               ("general", GENERAL_KEY, restore_general)):
+        try:
+            if key in sc.sticky or (name == "general" and os.path.exists(_profile_backup_path())):
+                result[name] = restore()
+        except Exception as error:
+            failures.append(name + ": " + str(error))
+    if failures:
+        raise RuntimeError("Settings restoration failed: " + "; ".join(failures))
     return result
 
 
@@ -712,6 +718,10 @@ def restore_general():
         write_profile(state["before"])
     if profile_bytes() != state["before"]:
         raise ValueError("General restoration failed byte readback")
+    # A failed preset restoration may be retried after the profile succeeds.
+    preset = sc.sticky.get(PRESET_KEY)
+    if preset is not None and preset.get("profile_before") == state["after"]:
+        preset["profile_before"] = state["before"]
     if os.path.exists(backup):
         os.remove(backup)
     sc.sticky.pop(GENERAL_KEY, None)
