@@ -44,13 +44,13 @@ Camera position comes from the Rhino named view.
 ## Exposure
 | Key | Value | Allowed |
 |---|---|---|
-| AutoExposure | true | true, false |
+| AutoExposure | false | true, false |
 | ExposureBrightness | 50 | 0–100 % |
 
 ## Quality
 | Key | Value | Allowed |
 |---|---|---|
-| RenderQuality | HIGH | DRAFT, MEDIUM, HIGH, ULTRA |
+| RenderQuality | ULTRA | DRAFT, MEDIUM, HIGH, ULTRA |
 
 ## Corrections
 | Key | Value | Allowed |
@@ -64,17 +64,17 @@ Camera position comes from the Rhino named view.
 ## Effects
 | Key | Value | Allowed |
 |---|---|---|
-| MotionBlur | 50 | 0–100 % |
-| BloomIntensity | 15 | 0–100 % |
-| LensflareIntensity | 50 | 0–100 % |
-| VignetteIntensity | 30 | 0–100 % |
-| ChromaticAberration | 25 | 0–100 % |
+| MotionBlur | 0 | 0–100 % |
+| BloomIntensity | 0 | 0–100 % |
+| LensflareIntensity | 0 | 0–100 % |
+| VignetteIntensity | 0 | 0–100 % |
+| ChromaticAberration | 0 | 0–100 % |
 
 ## Fog
 | Key | Value | Allowed |
 |---|---|---|
-| FogHeight | 70 | 1–10000 m |
-| GodraysDensity | 10 | 0–100 % |
+| FogHeight | 1 | 1–10000 m |
+| GodraysDensity | 0 | 0–100 % |
 
 ## Illumination
 Sun position comes from the Rhino sun.
@@ -82,10 +82,10 @@ Sun position comes from the Rhino sun.
 | Key | Value | Allowed |
 |---|---|---|
 | SunPower | 80 | 0–500 % |
-| StarsMoonPower | 100 | 0–300 % |
+| StarsMoonPower | 0 | 0–300 % |
 | LightBrightness | 100 | 0–200 % |
-| AmbientAmount | 50 | 0–100 % |
-| ShadowSharpness | 50 | 0–100 % |
+| AmbientAmount | 100 | 0–100 % |
+| ShadowSharpness | 75 | 0–100 % |
 | LightViewAuto | true | true, false |
 | LightViewMinimum | 500 | 0.1–9999 lux |
 | LightViewMaximum | 90000 | 100–120000 lux |
@@ -93,7 +93,7 @@ Sun position comes from the Rhino sun.
 ## Wind
 | Key | Value | Allowed |
 |---|---|---|
-| WindIntensity | 25 | 0–100 % |
+| WindIntensity | 0 | 0–100 % |
 | WindDirectionAngle | 0 | 0–360 ° |
 
 ## Sky source
@@ -101,7 +101,7 @@ Sun position comes from the Rhino sun.
 |---|---|---|
 | HorizonSource | whiteGround | Enscape horizon name |
 | HorizonRotation | 0 | 0–360 ° |
-| WhiteBackground | false | true, false |
+| WhiteBackground | true | true, false |
 | SkyboxFile | "" | file path |
 | SkyboxUseSunSpot | false | true, false |
 | SkyboxNormalize | true | true, false |
@@ -111,12 +111,12 @@ Sun position comes from the Rhino sun.
 ## Clouds
 | Key | Value | Allowed |
 |---|---|---|
-| CloudDensity | 50 | 0–100 % |
-| CloudVariety | 50 | 0–100 % |
-| CloudCirrusAmount | 50 | 0–100 % |
-| CloudContrails | 2 | 0–30 |
-| CloudX | 5000 | 0–10000 m |
-| CloudY | 5000 | 0–10000 m |
+| CloudDensity | 0 | 0–100 % |
+| CloudVariety | 0 | 0–100 % |
+| CloudCirrusAmount | 0 | 0–100 % |
+| CloudContrails | 0 | 0–30 |
+| CloudX | 0 | 0–10000 m |
+| CloudY | 0 | 0–10000 m |
 
 ## Output
 Format is always PNG (Enscape's Rhino capture route). File names and folders come from the capture
@@ -124,9 +124,9 @@ call, so Enscape's own screenshot folder settings are not in this sheet.
 
 | Key | Value | Allowed |
 |---|---|---|
-| ScreenshotResolution | FULL_HD | WINDOW, _1024, HD, FULL_HD, ULTRA_HD, CUSTOM |
-| ScreenshotResolutionX | 1920 | 500–8192 px; used when CUSTOM |
-| ScreenshotResolutionY | 1080 | 500–8192 px; used when CUSTOM |
+| ScreenshotResolution | ULTRA_HD | WINDOW, _1024, HD, FULL_HD, ULTRA_HD, CUSTOM |
+| ScreenshotResolutionX | 3840 | 500–8192 px; used when CUSTOM |
+| ScreenshotResolutionY | 2160 | 500–8192 px; used when CUSTOM |
 | ScreenshotViewportAspectRatio | false | true, false |
 | ApplyAlphaChannelDuringImageExport | false | true, false |
 | ExportBackgroundMask | false | true, false; true also writes alpha mask, depth, material ID and object ID PNGs |
