@@ -2,7 +2,10 @@
 name: bc-enscape
 description: >-
   Run Enscape renders from Rhino driven through Rook. Use when the user asks for an Enscape render
-  of a Rhino view.
+  of a Rhino view, and also whenever they mention Enscape together with Rhino: a sun or shadow
+  study, a section or several views rendered in one go, a change to Enscape render settings or
+  their defaults, depth, material or object ID channels, or overlaying an Enscape render or its
+  channels on a Rhino screenshot, even if they do not say "render".
 ---
 <!-- bc-enscape-skill-loaded-marker -->
 
@@ -20,7 +23,9 @@ sheet [render-defaults.md](render-defaults.md). Tested with Enscape 4.22.0.1361.
   after step 6.
 
 ## Workflow Steps
-Each Rook call returns to Rhino's event loop: poll in later calls, never `.Wait()` or loop.
+Enscape's start, preparation and capture tasks only progress while Rhino's event loop runs, which
+happens between Rook calls. So start a task in one call and poll for it in later calls: a `.Wait()`
+or a loop inside one call holds the event loop, and Rhino hangs.
 
 ### Step 1: Bind
 **Intent:** work on the intended Rhino. Ping Rook, list sessions, bind with
@@ -42,7 +47,8 @@ enscape.apply_defaults({})   # or the request's {key: value}, enum names
 
 ### Step 3: Renderer host
 **Intent:** find the renderer of the bound Rhino. With `Get-CimInstance Win32_Process`, take the
-`Enscape.RendererHost` whose `ParentProcessId` is the Rhino PID. Look it up every job.
+`Enscape.RendererHost` whose `ParentProcessId` is the Rhino PID. Look it up every job: other Rhino
+windows have their own hosts, and a PID from an earlier job may now belong to another one.
 
 ### Step 4: Start
 **Intent:** start Enscape hidden. `enscape.start_hidden(pid)`; `enscape.status()` shows
@@ -59,7 +65,9 @@ enscape.collect_capture()                    # poll: files and pixel sizes
 ```
 
 ### Step 6: Restore
-**Intent:** leave Rhino and Enscape as found. Open the image. Restore camera and sun.
+**Intent:** leave Rhino and Enscape as found: the sheet's values are written into the document's
+presets and the user's own Enscape profile, so without this step the next render, and the user's
+own Enscape sessions, would inherit them. Open the image. Restore camera and sun.
 `enscape.restore_settings()` restores presets and profile and raises one error naming every failed
 readback. If this job started the renderer, close only its window, then `enscape.stop_monitor()`.
 
@@ -71,7 +79,8 @@ readback. If this job started the renderer, close only its window, then `enscape
   rest). Names, types and bounds: [settings.md](references/settings.md).
 
 ## Gotchas
-- Never save the Rhino model unless asked.
+- Save the Rhino model only when asked: it is the user's project file, and during a job it holds a
+  changed sun, view and temporary Enscape presets.
 - Camera comes from the named view and sun from the Rhino sun, not from the sheet.
 - Raytracing, DLSS and denoisers are user-wide and read at renderer start
   ([settings.md](references/settings.md)).
